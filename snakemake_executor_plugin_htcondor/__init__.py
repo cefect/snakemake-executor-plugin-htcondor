@@ -758,10 +758,24 @@ class Executor(RemoteExecutor):
             for attr in ("script", "notebook"):
                 if value := getattr(rule, attr, None):
                     self.logger.debug(f"Processing {attr}: {value}")
+                    candidate = str(value).strip()
+                    if hasattr(owner_job, "wildcards") and hasattr(owner_job, "params"):
+                        candidate = owner_job.format_wildcards(
+                            candidate,
+                            wildcards=owner_job.wildcards,
+                            params=owner_job.params,
+                        )
+                    candidate = normpath(candidate)
+                    if not exists(candidate):
+                        self.logger.debug(
+                            f"Skipping {attr} auto-transfer path that does not exist "
+                            f"relative to submit directory: {candidate}. "
+                            "Relying on explicit htcondor_transfer_input_files."
+                        )
+                        continue
                     self._add_file_if_transferable(
-                        value,
+                        candidate,
                         transfer_input_files,
-                        expand_wildcards=True,
                         job=owner_job,
                     )
 
