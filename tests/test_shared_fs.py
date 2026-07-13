@@ -294,6 +294,33 @@ class TestGetFilesForTransfer:
 
         assert "scripts/process.py" in transfer_input
 
+    def test_missing_auto_script_path_skipped_with_explicit_transfer(self):
+        """Test missing script auto-transfer paths are skipped with explicit transfer."""
+        self.job.rule = Mock()
+        self.job.rule.script = "scripts/_00_event_prep.py"
+        self.job.rule.notebook = None
+        self.job.wildcards = {}
+        self.job.params = {}
+        self.job.format_wildcards = Mock(side_effect=lambda path, **kwargs: path)
+
+        def mock_get(key, default=None):
+            if key == "htcondor_transfer_input_files":
+                return "smk/scripts/_00_event_prep.py"
+            elif key == "preserve_relative_paths":
+                return True
+            return default
+
+        self.job.resources.get = Mock(side_effect=mock_get)
+
+        with patch(
+            "snakemake_executor_plugin_htcondor.exists",
+            side_effect=lambda path: str(path) == "smk/scripts/_00_event_prep.py",
+        ):
+            transfer_input, *_ = self.executor._get_files_for_transfer(self.job)
+
+        assert "scripts/_00_event_prep.py" not in transfer_input
+        assert "smk/scripts/_00_event_prep.py" in transfer_input
+
     def test_notebook_file_included_in_transfer(self):
         """Test that notebook files from notebook: directive are transferred."""
         self.job.rule = Mock()
