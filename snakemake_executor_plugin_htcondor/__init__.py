@@ -759,6 +759,9 @@ class Executor(RemoteExecutor):
                 if value := getattr(rule, attr, None):
                     self.logger.debug(f"Processing {attr}: {value}")
                     candidate = str(value).strip()
+                    if getattr(rule, "basedir", None):
+                        resolved = str(rule.basedir.join(candidate))
+                        candidate = relpath(resolved, self.workflow.workdir_init)
                     if hasattr(owner_job, "wildcards") and hasattr(owner_job, "params"):
                         candidate = owner_job.format_wildcards(
                             candidate,
