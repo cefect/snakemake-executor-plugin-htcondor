@@ -722,16 +722,31 @@ class Executor(RemoteExecutor):
         # Internal intermediates are NOT in job.output.  However, Snakemake's
         # postprocess step checks ALL outputs of ALL rules in the group for
         # existence on the AP after the job completes.  The fix is to also
-        # collect outputs from each individual job via job.jobs.
-        all_output_paths = list(job.output) if job.output else []
+        # collect outputs and logs from each individual job via job.jobs.
+        output_path_collections = [job.output, getattr(job, "log", [])]
         if job.is_group() and hasattr(job, "jobs"):
-            seen_paths = {str(p) for p in all_output_paths}
             for individual_job in job.jobs:
-                for p in individual_job.output:
-                    p_str = str(p)
-                    if p_str not in seen_paths:
-                        seen_paths.add(p_str)
-                        all_output_paths.append(p)
+                output_path_collections.extend(
+                    [
+                        individual_job.output,
+                        getattr(individual_job, "log", []),
+                    ]
+                )
+
+        all_output_paths = []
+        seen_paths = set()
+        for path_collection in output_path_collections:
+            if isinstance(path_collection, str):
+                path_iter = [path_collection]
+            elif path_collection and hasattr(path_collection, "__iter__"):
+                path_iter = path_collection
+            else:
+                path_iter = []
+            for p in path_iter:
+                p_str = str(p)
+                if p_str not in seen_paths:
+                    seen_paths.add(p_str)
+                    all_output_paths.append(p)
 
         for path in all_output_paths:
             self._add_file_if_transferable(

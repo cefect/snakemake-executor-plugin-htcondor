@@ -165,4 +165,5 @@ poetry.lock
 results/
 .snakemake/
 /examples/**/logs/
-snakemake-executor-plugin-htcondor_wsl.code-workspace
+*.code-workspace
+README-cef.md

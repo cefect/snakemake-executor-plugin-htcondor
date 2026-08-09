@@ -143,6 +143,7 @@ class TestGetFilesForTransfer:
         self.job.is_group = Mock(return_value=False)
         self.job.input = []
         self.job.output = []
+        self.job.log = []
         self.job.resources = Mock()
         self.job.resources.get = Mock(
             return_value=None
@@ -150,6 +151,7 @@ class TestGetFilesForTransfer:
         self.job.rule = Mock()
         self.job.rule.script = None
         self.job.rule.notebook = None
+        self.job.rule.basedir = None
 
     def test_snakefile_not_on_shared_fs(self):
         """Test that Snakefile not on shared FS is included in transfer."""
@@ -251,6 +253,46 @@ class TestGetFilesForTransfer:
             assert dest.startswith(
                 "/"
             ), f"Remap destination should be absolute: {remap}"
+
+    def test_log_files_transferred_as_outputs(self):
+        """Test that rule log files are transferred back from the EP."""
+        self.job.output = ["output/results/data.txt"]
+        self.job.log = ["logs/job.log", "/staging/shared.log"]
+
+        _, transfer_output, transfer_remaps = self.executor._get_files_for_transfer(
+            self.job
+        )
+
+        assert "logs/job.log" in transfer_output
+        assert "/staging/shared.log" not in transfer_output
+        assert any("logs/job.log" in r for r in transfer_remaps)
+
+    def test_group_job_log_files_transferred_from_individual_jobs(self):
+        """Test that grouped jobs transfer each individual rule log file."""
+        job_a = Mock()
+        job_a.output = ["output/intermediate.txt"]
+        job_a.log = ["logs/step_a.log"]
+        job_a.rule = Mock()
+        job_a.rule.script = None
+        job_a.rule.notebook = None
+
+        job_b = Mock()
+        job_b.output = ["output/final.txt"]
+        job_b.log = ["logs/step_b.log"]
+        job_b.rule = Mock()
+        job_b.rule.script = None
+        job_b.rule.notebook = None
+
+        self.job.is_group = Mock(return_value=True)
+        self.job.output = ["output/final.txt"]
+        self.job.log = []
+        self.job.jobs = [job_a, job_b]
+
+        _, transfer_output, _ = self.executor._get_files_for_transfer(self.job)
+
+        assert "logs/step_a.log" in transfer_output
+        assert "logs/step_b.log" in transfer_output
+        assert "logs" not in transfer_output
 
     def test_config_files_not_handled_here(self):
         """Test that config files are NOT handled by _get_files_for_transfer.
