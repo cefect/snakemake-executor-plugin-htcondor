@@ -72,7 +72,35 @@ echo ""
 echo "=== Workflow completed successfully ==="
 
 # -----------------------------------------------------------------------------
-# Post-run verification 1: Re-run idempotency
+# Post-run verification 1: Current local() execution placement
+# -----------------------------------------------------------------------------
+# With --shared-fs-usage none, Snakemake runs a rule with a local() input on the
+# AP before the executor sees it.  The normal-input control must instead run on
+# the EP through HTCondor.  Image-specific markers and _CONDOR_SCRATCH_DIR make
+# this a placement proof rather than an inference from transferred output paths.
+echo ""
+echo "=== local() execution-placement check ==="
+
+if ! grep -qx "ap_marker=present" output/local_input_probe.txt \
+    || ! grep -qx "ep_marker=absent" output/local_input_probe.txt \
+    || ! grep -qx "condor_scratch_dir=absent" output/local_input_probe.txt; then
+    echo "FAIL: local_input_probe did not show AP-local execution"
+    cat output/local_input_probe.txt
+    exit 1
+fi
+
+if ! grep -qx "ap_marker=absent" output/condor_probe.txt \
+    || ! grep -qx "ep_marker=present" output/condor_probe.txt \
+    || grep -qx "condor_scratch_dir=absent" output/condor_probe.txt; then
+    echo "FAIL: condor_probe did not show EP execution"
+    cat output/condor_probe.txt
+    exit 1
+fi
+
+echo "PASS: local() input ran on AP and normal input ran on EP"
+
+# -----------------------------------------------------------------------------
+# Post-run verification 2: Re-run idempotency
 # -----------------------------------------------------------------------------
 # A dry-run immediately after a successful run should report "Nothing to be
 # done."  If the executor stomped mtimes during output transfer (the pre-fix
@@ -107,7 +135,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Post-run verification 2: htcondor_transfer_output_files sidecar check
+# Post-run verification 3: htcondor_transfer_output_files sidecar check
 # -----------------------------------------------------------------------------
 # The extra_output_check rule writes a sidecar file that is NOT a declared
 # Snakemake output but IS declared via htcondor_transfer_output_files.
@@ -133,7 +161,7 @@ if [ "$SIDECAR_PASS" = false ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Post-run verification 3: Shared filesystem output check
+# Post-run verification 4: Shared filesystem output check
 # -----------------------------------------------------------------------------
 # The shared_fs_write rule writes output directly to /staging/torture-test/
 # (the shared mount).  Since the executor excludes shared-FS paths from
@@ -160,7 +188,7 @@ if [ "$SHARED_FS_PASS" = false ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Post-run verification 4: Negative test — a deliberately failing job
+# Post-run verification 5: Negative test — a deliberately failing job
 # -----------------------------------------------------------------------------
 # Runs the always_fail rule (NOT part of `rule all`) as a separate, targeted
 # invocation and asserts that the workflow exits non-zero AND surfaces the

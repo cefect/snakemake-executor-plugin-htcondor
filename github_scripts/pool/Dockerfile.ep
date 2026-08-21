@@ -19,6 +19,9 @@ RUN dnf install -y \
     && pip3.11 install --no-cache-dir "snakemake>=9.6.2" \
     && ln -sf /usr/bin/python3.11 /usr/local/bin/python
 
+# EP-only provenance marker for the local() execution-placement regression test.
+RUN touch /etc/torture-ep-marker
+
 # Advertise a custom machine attribute so the torture test's attribute_check
 # rule can require it (requirements="TortureTestEP == true"). Because the job
 # only matches when this is advertised, a successful run proves the executor's

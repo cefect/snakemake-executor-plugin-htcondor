@@ -33,6 +33,9 @@ COPY snakemake_executor_plugin_htcondor /opt/plugin/snakemake_executor_plugin_ht
 RUN pip3.11 install --no-cache-dir "snakemake>=9.6.2" /opt/plugin \
     && ln -sf /usr/bin/python3.11 /usr/local/bin/python
 
+# AP-only provenance marker for the local() execution-placement regression test.
+RUN touch /etc/torture-ap-marker
+
 # Drop the CI torture-test workflow into the submit user's home — a path NOT
 # under /staging, so its non-shared files are genuinely transferred. We COPY
 # the workflow files explicitly (not the whole github_scripts/ dir) so the

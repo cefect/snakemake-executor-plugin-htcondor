@@ -96,6 +96,9 @@ clearly-commented adjustments to the harness (none touch the executor):
    (`output/<sample>_extra_sidecar.txt`) were transferred back to the AP.
 1. **Partial shared FS** — `/staging/torture-test/<sample>_shared_data.txt`
    exists on the AP (written directly by the EP, never transferred).
+1. **Current `input: local()` placement** — a `local()` input records the AP-only
+   marker and no `_CONDOR_SCRATCH_DIR`, while a normal-input control records the
+   EP-only marker and an HTCondor scratch directory.
 
 The `mtime_check` rule (a localrule on the AP) additionally fails the run if the
 shared-directory mtime ordering is wrong.
@@ -152,7 +155,7 @@ docker compose down -v
 |------|---------|
 | `Snakefile` | The CI workflow (vanilla universe, `/staging`). |
 | `wrapper.sh` | `job_wrapper` — re-invokes `snakemake` on the EP per rule. |
-| `run.sh` | Runs the workflow + the three post-run checks. |
+| `run.sh` | Runs the workflow + placement and post-run checks. |
 | `cleanup.sh` | Removes generated outputs and `/staging/torture-test`. |
 | `scripts/` | `process_sample{1,2}.py` (wildcard-selected) + `stats_helpers.py`. |
 | `modules/quality_check/` | A module + nested `validation/` module. |

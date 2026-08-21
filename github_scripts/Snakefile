@@ -35,6 +35,9 @@
 # - Partial shared filesystem via --htcondor-shared-fs-prefixes
 #   - Files under the shared prefix are NOT transferred by HTCondor
 #   - Mixed rules with both shared-FS and local inputs/outputs
+# - Current input: local() behavior with --shared-fs-usage none
+#   - A rule with a local() input executes locally on the AP before the executor
+#   - A normal-input control rule executes on the EP through HTCondor
 # - Multiple samples (concurrent HTCondor jobs for different wildcard values)
 # - Re-run idempotency (automated --dryrun verification in run.sh)
 
@@ -62,6 +65,8 @@ rule all:
         expand("output/{sample}_attribute_check.txt", sample=SAMPLES),
         expand("output/{sample}_getenv_check.txt", sample=SAMPLES),
         expand("output/{sample}_env_special_check.txt", sample=SAMPLES),
+        "output/local_input_probe.txt",
+        "output/condor_probe.txt",
         expand(SHARED_FS_TEST_DIR + "/{sample}_flaky_retry.txt", sample=SAMPLES)
 
 # Use module for quality checking
@@ -96,6 +101,66 @@ rule create_data:
             echo "hello error ${{timestamp}}" >&2
             sleep 2
         done
+        """
+
+
+# =============================================================================
+# CURRENT local() EXECUTION-PLACEMENT REGRESSION TEST
+# =============================================================================
+# Under --shared-fs-usage none, Snakemake classifies a job with a local() input
+# as local before the executor receives it.  This deliberately asserts the
+# current AP-side behavior, so a future intentional behavior change has a
+# concrete integration test to update.
+rule create_probe_data:
+    output:
+        "data/probe.txt"
+    resources:
+        universe="vanilla",
+        request_disk="1GB",
+        request_memory="512MB",
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        echo "execution-placement probe" > {output}
+        """
+
+
+rule local_input_probe:
+    input:
+        local("data/probe.txt")
+    output:
+        "output/local_input_probe.txt"
+    shell:
+        """
+        (
+            printf "hostname=%s\\n" "$(hostname)"
+            printf "pwd=%s\\n" "$PWD"
+            printf "condor_scratch_dir=%s\\n" "${{_CONDOR_SCRATCH_DIR:-absent}}"
+            if [ -e /etc/torture-ap-marker ]; then echo "ap_marker=present"; else echo "ap_marker=absent"; fi
+            if [ -e /etc/torture-ep-marker ]; then echo "ep_marker=present"; else echo "ep_marker=absent"; fi
+        ) > {output}
+        """
+
+
+rule condor_probe:
+    input:
+        "data/probe.txt"
+    output:
+        "output/condor_probe.txt"
+    resources:
+        universe="vanilla",
+        request_disk="1GB",
+        request_memory="512MB",
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        (
+            printf "hostname=%s\\n" "$(hostname)"
+            printf "pwd=%s\\n" "$PWD"
+            printf "condor_scratch_dir=%s\\n" "${{_CONDOR_SCRATCH_DIR:-absent}}"
+            if [ -e /etc/torture-ap-marker ]; then echo "ap_marker=present"; else echo "ap_marker=absent"; fi
+            if [ -e /etc/torture-ep-marker ]; then echo "ep_marker=present"; else echo "ep_marker=absent"; fi
+        ) > {output}
         """
 
 rule process_data:
