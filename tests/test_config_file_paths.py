@@ -470,6 +470,9 @@ class TestFilesystemModes:
         self.job.input = []
         self.job.output = []
         self.job.threads = 1
+        self.job.rule = Mock(script=None, notebook=None, basedir=None)
+        self.job.wildcards = {}
+        self.job.params = {}
         self.job.resources = Mock()
         self.job.resources.get = Mock(return_value=None)
 

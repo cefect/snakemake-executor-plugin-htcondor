@@ -109,21 +109,17 @@ class TestGroupedJobScriptTransfer:
                 ),
             ]
 
-            # Mock the format_wildcards for each job to expand properly
-            individual_jobs[0].format_wildcards = (
-                lambda s, **kw: "scripts/process_sample1.py"
-            )
-            individual_jobs[1].format_wildcards = (
-                lambda s, **kw: "scripts/process_sample2.py"
-            )
+            # Return real expanded script paths so transfer validation can find them.
+            individual_jobs[0].format_wildcards = lambda s, **kw: script_files[0]
+            individual_jobs[1].format_wildcards = lambda s, **kw: script_files[1]
 
             group_job = create_mock_group_job(individual_jobs)
 
             transfer_input, *_ = self.executor._get_files_for_transfer(group_job)
 
             # Both expanded script paths should be in transfer list
-            assert "scripts/process_sample1.py" in transfer_input
-            assert "scripts/process_sample2.py" in transfer_input
+            assert script_files[0] in transfer_input
+            assert script_files[1] in transfer_input
         finally:
             for script in script_files:
                 if os.path.exists(script):
