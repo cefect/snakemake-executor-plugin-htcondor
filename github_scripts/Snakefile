@@ -52,6 +52,12 @@ SAMPLES = ["sample1", "sample2"]
 # top so rule `all` can reference it.
 SHARED_FS_TEST_DIR = "/staging/torture-test"
 
+
+def source_path_probe_input(wildcards):
+    """Resolve the probe source only when its job is scheduled."""
+    return workflow.source_path("source_path_probe.txt")
+
+
 rule all:
     input:
         expand("output/{sample}_report.txt", sample=SAMPLES),
@@ -171,7 +177,7 @@ rule condor_probe:
 # flag that would make the job AP-local under --shared-fs-usage none.
 rule source_path_probe:
     input:
-        source=workflow.source_path("source_path_probe.txt")
+        source=source_path_probe_input
     output:
         "output/source_path_probe.txt"
     resources:
