@@ -38,12 +38,12 @@ jobs:
             yum install -y sqlite sqlite-devel python${{ env.PYTHON_VERSION }} python${{ env.PYTHON_VERSION }}-pip python${{ env.PYTHON_VERSION }}-devel gcc
             condor_master
             su -c "condor_submit tests/sleep.sub" submituser
-            su -c "pip${{ env.PYTHON_VERSION }} install poetry" submituser
-            su -c "poetry lock" submituser
-            su -c "poetry install" submituser
-            su -c "poetry run coverage run -m pytest tests/ integration_tests/ -vvv" submituser
+            su -c "python${{ env.PYTHON_VERSION }} -m pip install --user poetry" submituser
+            su -c "python${{ env.PYTHON_VERSION }} -m poetry lock" submituser
+            su -c "python${{ env.PYTHON_VERSION }} -m poetry install" submituser
+            su -c "python${{ env.PYTHON_VERSION }} -m poetry run coverage run -m pytest tests/ integration_tests/ -vvv" submituser
             ls /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor
             for file in /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor/*.log; do cat "$file"; done
             find /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor -name "*.err" -exec cat {} \;
-            su -c "poetry run coverage report -m --omit=Snakefile" submituser
+            su -c "python${{ env.PYTHON_VERSION }} -m poetry run coverage report -m --omit=Snakefile" submituser
           '
