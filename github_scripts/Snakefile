@@ -38,6 +38,8 @@
 # - Current input: local() behavior with --shared-fs-usage none
 #   - A rule with a local() input executes locally on the AP before the executor
 #   - A normal-input control rule executes on the EP through HTCondor
+#   - A workflow.source_path() input executes on the EP with its source content
+#     transferred by HTCondor
 # - Multiple samples (concurrent HTCondor jobs for different wildcard values)
 # - Re-run idempotency (automated --dryrun verification in run.sh)
 
@@ -67,6 +69,7 @@ rule all:
         expand("output/{sample}_env_special_check.txt", sample=SAMPLES),
         "output/local_input_probe.txt",
         "output/condor_probe.txt",
+        "output/source_path_probe.txt",
         expand(SHARED_FS_TEST_DIR + "/{sample}_flaky_retry.txt", sample=SAMPLES)
 
 # Use module for quality checking
@@ -155,6 +158,31 @@ rule condor_probe:
     shell:
         """
         (
+            printf "hostname=%s\\n" "$(hostname)"
+            printf "pwd=%s\\n" "$PWD"
+            printf "condor_scratch_dir=%s\\n" "${{_CONDOR_SCRATCH_DIR:-absent}}"
+            if [ -e /etc/torture-ap-marker ]; then echo "ap_marker=present"; else echo "ap_marker=absent"; fi
+            if [ -e /etc/torture-ep-marker ]; then echo "ep_marker=present"; else echo "ep_marker=absent"; fi
+        ) > {output}
+        """
+
+
+# Source paths bypass the default storage provider without carrying the local()
+# flag that would make the job AP-local under --shared-fs-usage none.
+rule source_path_probe:
+    input:
+        source=workflow.source_path("source_path_probe.txt")
+    output:
+        "output/source_path_probe.txt"
+    resources:
+        universe="vanilla",
+        request_disk="1GB",
+        request_memory="512MB",
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        (
+            printf "input_content=%s\\n" "$(cat {input.source})"
             printf "hostname=%s\\n" "$(hostname)"
             printf "pwd=%s\\n" "$PWD"
             printf "condor_scratch_dir=%s\\n" "${{_CONDOR_SCRATCH_DIR:-absent}}"

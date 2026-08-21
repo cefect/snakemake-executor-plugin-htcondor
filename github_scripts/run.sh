@@ -97,7 +97,16 @@ if ! grep -qx "ap_marker=absent" output/condor_probe.txt \
     exit 1
 fi
 
-echo "PASS: local() input ran on AP and normal input ran on EP"
+if ! grep -qx "input_content=workflow.source_path probe" output/source_path_probe.txt \
+    || ! grep -qx "ap_marker=absent" output/source_path_probe.txt \
+    || ! grep -qx "ep_marker=present" output/source_path_probe.txt \
+    || grep -qx "condor_scratch_dir=absent" output/source_path_probe.txt; then
+    echo "FAIL: source_path_probe did not transfer its source input to the EP"
+    cat output/source_path_probe.txt
+    exit 1
+fi
+
+echo "PASS: local() input ran on AP; normal and workflow.source_path inputs ran on EP"
 
 # -----------------------------------------------------------------------------
 # Post-run verification 2: Re-run idempotency

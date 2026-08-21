@@ -42,6 +42,7 @@ RUN touch /etc/torture-ap-marker
 # pool/ directory and the generated pool_password secret are never baked in.
 RUN mkdir -p /home/submituser/torture-test
 COPY github_scripts/Snakefile \
+     github_scripts/source_path_probe.txt \
      github_scripts/wrapper.sh \
      github_scripts/run.sh \
      github_scripts/cleanup.sh \

@@ -96,9 +96,11 @@ clearly-commented adjustments to the harness (none touch the executor):
    (`output/<sample>_extra_sidecar.txt`) were transferred back to the AP.
 1. **Partial shared FS** — `/staging/torture-test/<sample>_shared_data.txt`
    exists on the AP (written directly by the EP, never transferred).
-1. **Current `input: local()` placement** — a `local()` input records the AP-only
-   marker and no `_CONDOR_SCRATCH_DIR`, while a normal-input control records the
-   EP-only marker and an HTCondor scratch directory.
+1. **Input placement controls** — a `local()` input records the AP-only marker
+   and no `_CONDOR_SCRATCH_DIR`, while normal-input and `workflow.source_path()`
+   controls record the EP-only marker and an HTCondor scratch directory.
+   The `workflow.source_path()` control also records the expected source-file
+   content, proving HTCondor transferred that input to the EP.
 
 The `mtime_check` rule (a localrule on the AP) additionally fails the run if the
 shared-directory mtime ordering is wrong.
