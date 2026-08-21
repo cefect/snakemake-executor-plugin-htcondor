@@ -167,3 +167,4 @@ results/
 /examples/**/logs/
 *.code-workspace
 README-cef.md
+plan.md
