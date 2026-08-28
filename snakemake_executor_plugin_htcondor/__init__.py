@@ -729,9 +729,7 @@ class Executor(RemoteExecutor):
         # outputs before the outputs of their downstream consumers.
         if job.is_group():
             individual_jobs = [
-                individual_job
-                for layer in job.toposorted
-                for individual_job in layer
+                individual_job for layer in job.toposorted for individual_job in layer
             ]
             output_path_collections = []
             for individual_job in individual_jobs:
@@ -774,9 +772,7 @@ class Executor(RemoteExecutor):
         # for individual jobs, the single rule lives on job.rule directly.
         if job.is_group():
             rules_and_jobs = [
-                (ij.rule, ij)
-                for ij in individual_jobs
-                if hasattr(ij, "rule")
+                (ij.rule, ij) for ij in individual_jobs if hasattr(ij, "rule")
             ]
         else:
             rules_and_jobs = [(job.rule, job)] if hasattr(job, "rule") else []

@@ -137,9 +137,7 @@ class TestSubmittingAttributes:
             ),
         ],
     )
-    def test_run_job_orders_transfer_outputs(
-        self, mock_executor, is_group, expected
-    ):
+    def test_run_job_orders_transfer_outputs(self, mock_executor, is_group, expected):
         """Test grouped order preservation and ordinary lexical sorting."""
         captured_submit_dict = {}
         mock_executor._get_exec_args_and_transfer_files.return_value = (
