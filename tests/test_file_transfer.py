@@ -598,6 +598,7 @@ class TestScriptBasedirResolution:
 
         self.job.is_group = Mock(return_value=True)
         self.job.jobs = [indv_j_a, indv_j_b]
+        self.job.toposorted = [[indv_j_a], [indv_j_b]]
 
         transfer_input, *_ = self.executor._get_files_for_transfer(self.job)
 
