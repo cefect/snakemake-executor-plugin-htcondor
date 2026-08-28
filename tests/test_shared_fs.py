@@ -287,6 +287,7 @@ class TestGetFilesForTransfer:
         self.job.output = ["output/final.txt"]
         self.job.log = []
         self.job.jobs = [job_a, job_b]
+        self.job.toposorted = [[job_a], [job_b]]
 
         _, transfer_output, _ = self.executor._get_files_for_transfer(self.job)
 

@@ -186,9 +186,20 @@ def create_mock_group_job(
         Mock job configured as a group job.
     """
     # Use spec_set to limit what attributes the mock has
-    job = Mock(spec=["is_group", "jobs", "input", "output", "resources", "name"])
+    job = Mock(
+        spec=[
+            "is_group",
+            "jobs",
+            "toposorted",
+            "input",
+            "output",
+            "resources",
+            "name",
+        ]
+    )
     job.is_group = Mock(return_value=True)
     job.jobs = individual_jobs
+    job.toposorted = [individual_jobs]
     job.name = "test_group_job"
 
     # Aggregate inputs from all individual jobs (the executor does not use

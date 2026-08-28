@@ -724,17 +724,24 @@ class Executor(RemoteExecutor):
         # group's *external* outputs — those consumed by rules outside the group.
         # Internal intermediates are NOT in job.output.  However, Snakemake's
         # postprocess step checks ALL outputs of ALL rules in the group for
-        # existence on the AP after the job completes.  The fix is to also
-        # collect outputs and logs from each individual job via job.jobs.
-        output_path_collections = [job.output, getattr(job, "log", [])]
-        if job.is_group() and hasattr(job, "jobs"):
-            for individual_job in job.jobs:
+        # existence on the AP after the job completes.  Collect each rule's
+        # outputs in Snakemake's dependency order so HTCondor receives upstream
+        # outputs before the outputs of their downstream consumers.
+        if job.is_group():
+            individual_jobs = [
+                individual_job for layer in job.toposorted for individual_job in layer
+            ]
+            output_path_collections = []
+            for individual_job in individual_jobs:
                 output_path_collections.extend(
                     [
                         individual_job.output,
                         getattr(individual_job, "log", []),
                     ]
                 )
+        else:
+            individual_jobs = []
+            output_path_collections = [job.output, getattr(job, "log", [])]
 
         all_output_paths = []
         seen_paths = set()
@@ -761,13 +768,11 @@ class Executor(RemoteExecutor):
             )
 
         # Process script and notebook files from all rules in the job.
-        # For grouped jobs we iterate over job.jobs to reach each individual
-        # rule; for individual jobs the single rule lives on job.rule directly.
+        # For grouped jobs, reuse the dependency-ordered individual job list;
+        # for individual jobs, the single rule lives on job.rule directly.
         if job.is_group():
             rules_and_jobs = [
-                (ij.rule, ij)
-                for ij in (job.jobs if hasattr(job, "jobs") else [])
-                if hasattr(ij, "rule")
+                (ij.rule, ij) for ij in individual_jobs if hasattr(ij, "rule")
             ]
         else:
             rules_and_jobs = [(job.rule, job)] if hasattr(job, "rule") else []
@@ -830,6 +835,11 @@ class Executor(RemoteExecutor):
                     validate_exists=False,
                     warn_absolute=True,
                 )
+
+        if job.is_group():
+            self.logger.debug(
+                f"Dependency-ordered grouped outputs: {transfer_output_files}"
+            )
 
         # Explicitly handle job_wrapper if specified
         # The job_wrapper is used as the executable, so it must be transferred
@@ -1266,7 +1276,9 @@ class Executor(RemoteExecutor):
             if transfer_output_files:
                 self.logger.debug(f"Transfer output files: {transfer_output_files}")
                 submit_dict["transfer_output_files"] = ", ".join(
-                    sorted(transfer_output_files)
+                    transfer_output_files
+                    if job.is_group()
+                    else sorted(transfer_output_files)
                 )
 
             if transfer_output_remaps:
