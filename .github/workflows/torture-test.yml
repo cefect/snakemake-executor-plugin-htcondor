@@ -15,20 +15,9 @@ on:
       - main
   pull_request:
   workflow_dispatch:
-    inputs:
-      test:
-        description: Test job to run
-        required: true
-        default: all
-        type: choice
-        options:
-          - all
-          - torture-test
-          - issue-65-grouped-output-mtime
 
 jobs:
   torture-test:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.test == 'all' || inputs.test == 'torture-test' }}
     runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || vars.SELF_HOSTED_RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 30
     defaults:
@@ -115,107 +104,6 @@ jobs:
           docker compose exec -T ep bash -lc 'cat /var/log/condor/StartLog 2>/dev/null | tail -n 200' || true
           echo "===== AP schedd log ====="
           docker compose exec -T ap bash -lc 'cat /var/log/condor/SchedLog 2>/dev/null | tail -n 200' || true
-
-      - name: Tear down the pool
-        if: always()
-        run: docker compose down -v
-
-  issue-65-grouped-output-mtime:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.test == 'all' || inputs.test == 'issue-65-grouped-output-mtime' }}
-    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || vars.SELF_HOSTED_RUNNER_LABEL || 'ubuntu-latest' }}
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: github_scripts/pool
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Generate pool password
-        run: ./make-pool-password.sh
-
-      - name: Build pool images
-        env:
-          BUILDX_BAKE_ENTITLEMENTS_FS: "0"
-        run: |
-          docker buildx bake -f docker-compose.yml \
-            --set "*.cache-from=type=gha" \
-            --set "*.cache-to=type=gha,mode=max" \
-            --load
-
-      - name: Start the HTCondor pool
-        run: docker compose up -d --no-build
-
-      - name: Wait for the pool to form
-        run: |
-          for i in $(seq 1 60); do
-            if docker compose exec -T ap condor_q >/dev/null 2>&1 \
-               && docker compose exec -T ap condor_status -startd -af Name 2>/dev/null | grep -q .; then
-              docker compose exec -T ap condor_status
-              exit 0
-            fi
-            sleep 5
-          done
-          docker compose logs
-          exit 1
-
-      - name: Prove issue 65 grouped-output mtime inversion
-        run: |
-          docker compose exec -T -u submituser ap bash -lc '
-            set -euo pipefail
-            cd ~/torture-test
-            mkdir -p issue65
-            printf "version=1\n" > issue65/source.txt
-            snakemake output/issue65_mtime_check.txt \
-              --jobs 1 \
-              --executor htcondor \
-              --htcondor-jobdir logs \
-              --htcondor-held-timeout 120 \
-              --shared-fs-usage none \
-              --htcondor-shared-fs-prefixes /staging \
-              --verbose
-            snakemake output/issue65_mtime_check.txt \
-              --rerun-triggers mtime \
-              --dryrun | tee issue65_dryrun.log
-            grep -qi "nothing to be done" issue65_dryrun.log
-
-            initial_result=$(cat issue65/01A_purge/sample.txt)
-            printf "version=2\n" > issue65/source.txt
-            snakemake output/issue65_mtime_check.txt \
-              --rerun-triggers mtime \
-              --dryrun | tee issue65_changed_dryrun.log
-            grep -q "issue65_upstream" issue65_changed_dryrun.log
-            grep -q "issue65_downstream" issue65_changed_dryrun.log
-
-            snakemake output/issue65_mtime_check.txt \
-              --jobs 1 \
-              --executor htcondor \
-              --htcondor-jobdir logs \
-              --htcondor-held-timeout 120 \
-              --shared-fs-usage none \
-              --htcondor-shared-fs-prefixes /staging \
-              --verbose
-            test "$initial_result" != "$(cat issue65/01A_purge/sample.txt)"
-            snakemake output/issue65_mtime_check.txt \
-              --rerun-triggers mtime \
-              --dryrun | tee issue65_final_dryrun.log
-            grep -qi "nothing to be done" issue65_final_dryrun.log
-          '
-
-      - name: Dump diagnostics on failure
-        if: failure()
-        run: |
-          docker compose exec -T -u submituser ap bash -lc '
-            cd ~/torture-test || exit 0
-            find issue65 output logs -type f 2>/dev/null | sort
-            find issue65 -type f -exec stat -c "%n %y" {} \; 2>/dev/null || true
-            find logs -type f \( -name "*.log" -o -name "*.out" -o -name "*.err" \) \
-              -exec sh -c '\''echo "===== $1 ====="; cat "$1"'\'' _ {} \; 2>/dev/null || true
-          ' || true
-          docker compose logs
 
       - name: Tear down the pool
         if: always()

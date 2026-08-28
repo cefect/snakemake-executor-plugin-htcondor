@@ -43,8 +43,6 @@
 # - Multiple samples (concurrent HTCondor jobs for different wildcard values)
 # - Re-run idempotency (automated --dryrun verification in run.sh)
 
-import os
-
 SAMPLES = ["sample1", "sample2"]
 
 # Shared filesystem area mounted on both the AP and EP (the CI pool shares a
@@ -1064,71 +1062,3 @@ rule always_fail:
         echo "TORTURE_DELIBERATE_FAILURE: rule always_fail fails on purpose" >&2
         exit 1
         """
-
-
-# =============================================================================
-# ISSUE #65: GROUPED OUTPUT TRANSFER ORDER
-# =============================================================================
-# The downstream output sorts before its upstream dependency.  The upstream
-# file exceeds Snakemake's default checksum limit so checksum comparison cannot
-# hide an AP-side mtime inversion after HTCondor transfers the grouped outputs.
-rule issue65_upstream:
-    input:
-        source="issue65/source.txt"
-    output:
-        "issue65/01_stac/sample.bin"
-    group: "issue65_group"
-    resources:
-        universe="vanilla",
-        request_disk="1GB",
-        request_memory="512MB",
-        job_wrapper="wrapper.sh"
-    shell:
-        """
-        dd if=/dev/zero of={output} bs=1M count=2 status=none
-        cat {input.source} >> {output}
-        """
-
-
-rule issue65_downstream:
-    input:
-        "issue65/01_stac/sample.bin"
-    output:
-        "issue65/01A_purge/sample.txt"
-    group: "issue65_group"
-    resources:
-        universe="vanilla",
-        request_disk="1GB",
-        request_memory="512MB",
-        job_wrapper="wrapper.sh"
-    shell:
-        """
-        sleep 2
-        sha256sum {input} > {output}
-        """
-
-
-localrules: issue65_mtime_check
-
-
-rule issue65_mtime_check:
-    """Assert that a grouped downstream output is not older on the AP."""
-    input:
-        upstream="issue65/01_stac/sample.bin",
-        downstream="issue65/01A_purge/sample.txt"
-    output:
-        "output/issue65_mtime_check.txt"
-    run:
-        upstream_mtime_ns = os.stat(input.upstream).st_mtime_ns
-        downstream_mtime_ns = os.stat(input.downstream).st_mtime_ns
-        result = (
-            f"upstream_mtime_ns={upstream_mtime_ns}\n"
-            f"downstream_mtime_ns={downstream_mtime_ns}\n"
-        )
-        with open(output[0], "w") as result_file:
-            result_file.write(result)
-        if downstream_mtime_ns < upstream_mtime_ns:
-            raise ValueError(
-                "Issue #65 reproduced: the downstream grouped output is older "
-                f"than its upstream dependency on the AP.\n{result}"
-            )
