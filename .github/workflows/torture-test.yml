@@ -165,7 +165,10 @@ jobs:
       - name: Prove issue 65 grouped-output mtime inversion
         run: |
           docker compose exec -T -u submituser ap bash -lc '
+            set -euo pipefail
             cd ~/torture-test
+            mkdir -p issue65
+            printf "version=1\n" > issue65/source.txt
             snakemake output/issue65_mtime_check.txt \
               --jobs 1 \
               --executor htcondor \
@@ -178,6 +181,28 @@ jobs:
               --rerun-triggers mtime \
               --dryrun | tee issue65_dryrun.log
             grep -qi "nothing to be done" issue65_dryrun.log
+
+            initial_result=$(cat issue65/01A_purge/sample.txt)
+            printf "version=2\n" > issue65/source.txt
+            snakemake output/issue65_mtime_check.txt \
+              --rerun-triggers mtime \
+              --dryrun | tee issue65_changed_dryrun.log
+            grep -q "issue65_upstream" issue65_changed_dryrun.log
+            grep -q "issue65_downstream" issue65_changed_dryrun.log
+
+            snakemake output/issue65_mtime_check.txt \
+              --jobs 1 \
+              --executor htcondor \
+              --htcondor-jobdir logs \
+              --htcondor-held-timeout 120 \
+              --shared-fs-usage none \
+              --htcondor-shared-fs-prefixes /staging \
+              --verbose
+            test "$initial_result" != "$(cat issue65/01A_purge/sample.txt)"
+            snakemake output/issue65_mtime_check.txt \
+              --rerun-triggers mtime \
+              --dryrun | tee issue65_final_dryrun.log
+            grep -qi "nothing to be done" issue65_final_dryrun.log
           '
 
       - name: Dump diagnostics on failure

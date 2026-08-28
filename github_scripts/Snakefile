@@ -1073,6 +1073,8 @@ rule always_fail:
 # file exceeds Snakemake's default checksum limit so checksum comparison cannot
 # hide an AP-side mtime inversion after HTCondor transfers the grouped outputs.
 rule issue65_upstream:
+    input:
+        source="issue65/source.txt"
     output:
         "issue65/01_stac/sample.bin"
     group: "issue65_group"
@@ -1084,6 +1086,7 @@ rule issue65_upstream:
     shell:
         """
         dd if=/dev/zero of={output} bs=1M count=2 status=none
+        cat {input.source} >> {output}
         """
 
 
@@ -1101,7 +1104,7 @@ rule issue65_downstream:
     shell:
         """
         sleep 2
-        wc -c < {input} > {output}
+        sha256sum {input} > {output}
         """
 
 
