@@ -80,8 +80,10 @@ if [ "$(grep -c '^item=' "$checkpoint_output")" -eq 2 ] \
    && grep -qx "item=beta" "$checkpoint_output" \
    && [ "$(grep -c '^checkpoint_ep_marker=present$' "$checkpoint_output")" -eq 2 ] \
    && [ "$(grep -c '^process_ep_marker=present$' "$checkpoint_output")" -eq 2 ] \
-   && grep -qx "collect_ep_marker=present" "$checkpoint_output" \
-   && ! grep -q 'condor_scratch=absent' "$checkpoint_output"; then
+   && grep -qx "collect_ap_marker=present" "$checkpoint_output" \
+   && [ "$(grep -c '^collect_condor_scratch=absent$' "$checkpoint_output")" -eq 1 ] \
+   && [ "$(grep -c '^checkpoint_condor_scratch=absent$' "$checkpoint_output")" -eq 0 ] \
+   && [ "$(grep -c '^process_condor_scratch=absent$' "$checkpoint_output")" -eq 0 ]; then
     echo "PASS: checkpoint and its two runtime-discovered jobs ran on EPs"
 else
     echo "FAIL: included checkpoint execution was not proven"

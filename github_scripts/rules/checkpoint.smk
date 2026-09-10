@@ -79,5 +79,10 @@ rule collect_checkpoint_items:
         """
         cat {input} > {output}
         printf "collect_condor_scratch=%s\\n" "${{_CONDOR_SCRATCH_DIR:-absent}}" >> {output}
-        if [ -e /etc/torture-ep-marker ]; then echo "collect_ep_marker=present" >> {output}; else echo "collect_ep_marker=absent" >> {output}; fi
+        if [ -e /etc/torture-ap-marker ]; then echo "collect_ap_marker=present" >> {output}; else echo "collect_ap_marker=absent" >> {output}; fi
         """
+
+
+# Avoid a third HTCondor negotiation cycle while retaining remote checkpoint and
+# runtime-discovered processing jobs inside the one-minute proof budget.
+localrules: collect_checkpoint_items
