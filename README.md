@@ -234,6 +234,19 @@ rule example:
 
 When this happens, the executor logs a warning to alert you that both resources are set and which one is being used.
 
+## Workflow Modularization and Checkpoints
+
+The executor supports Snakemake modules, `include:` statements, and checkpoints.
+
+With `--shared-fs-usage none`, each remote job reparses the workflow on its Execution Point.
+The executor therefore recursively discovers and transfers the main Snakefile, native module Snakefiles, and statically quoted include files such as `include: "rules/common.smk"`.
+Workflow source files under an `--htcondor-shared-fs-prefixes` path remain on the shared filesystem and are not transferred.
+Computed module or include paths, such as `include: config["rules"]`, are not currently discovered automatically and should be supplied through `htcondor_transfer_input_files`.
+
+Checkpoints require no executor-specific configuration.
+After a checkpoint finishes, Snakemake updates the DAG and the executor submits the newly discovered jobs normally.
+This behavior has been integration-tested without a shared filesystem by running a remote checkpoint, discovering two outputs at runtime, executing the resulting jobs on HTCondor Execution Points, and returning their outputs to the Access Point.
+
 ## Jobs Without Shared Filesystems
 
 Support for jobs without a shared filesystem is preliminary and experimental.
