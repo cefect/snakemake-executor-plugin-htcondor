@@ -24,6 +24,7 @@ services:
       USE_POOL_PASSWORD: "yes"
     volumes:
       - ./pool_password:/root/secrets/pool_password:ro
+      - ./torture-test.conf:/etc/condor/config.d/99-torture-test.conf:ro
     networks:
       - pool
 

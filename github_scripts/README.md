@@ -163,6 +163,7 @@ docker compose down -v
 | `modules/quality_check/` | A module + nested `validation/` module. |
 | `rules/checkpoint.smk` | An included checkpoint with runtime DAG expansion. |
 | `pool/docker-compose.yml` | The cm/ap/ep pool definition. |
+| `pool/torture-test.conf` | CI-only HTCondor settings for fast proof scheduling. |
 | `pool/Dockerfile.ap` | AP image: schedd + snakemake + plugin. |
 | `pool/Dockerfile.ep` | EP image: startd + python + snakemake. |
 | `pool/pre-exec.sh` | Makes `/staging` world-writable at container start. |
