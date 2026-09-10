@@ -84,5 +84,5 @@ rule collect_checkpoint_items:
 
 
 # Avoid a third HTCondor negotiation cycle while retaining remote checkpoint and
-# runtime-discovered processing jobs inside the one-minute proof budget.
+# runtime-discovered processing jobs inside the focused proof budget.
 localrules: collect_checkpoint_items

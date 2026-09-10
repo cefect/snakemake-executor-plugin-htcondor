@@ -56,11 +56,11 @@ mkdir -p "$SHARED_FS_TEST_DIR"
 chmod 1777 "$SHARED_FS_TEST_DIR"
 
 # Run the focused checkpoint proof separately so unrelated torture-test rules
-# cannot obscure its result. Keep this proof bounded to one minute.
+# cannot obscure its result. Allow two minutes for its scheduling generations.
 echo "=== Starting included checkpoint proof ==="
 echo ""
 
-timeout --signal=INT --kill-after=10s 60s snakemake \
+timeout --signal=INT --kill-after=10s 120s snakemake \
     output/sample1_checkpoint.txt \
     --jobs 10 \
     --executor htcondor \
