@@ -23,6 +23,7 @@
 # - Additional input file handling via `htcondor_transfer_input_files`
 # - Additional output file handling via `htcondor_transfer_output_files`
 # - Module Snakefile handling, including nested/recursive modules
+# - Checkpoint handling from a recursively included Snakefile
 # - Group directive (multiple rules executed as single HTCondor job)
 #   - Serial grouped jobs (linear chain: A → B → C)
 #   - Parallel grouped jobs (fan-out: A splits into B, C, D that run in parallel, then E aggregates)
@@ -76,6 +77,7 @@ rule all:
         "output/local_input_probe.txt",
         "output/condor_probe.txt",
         "output/source_path_probe.txt",
+        expand("output/{sample}_checkpoint.txt", sample=SAMPLES),
         expand(SHARED_FS_TEST_DIR + "/{sample}_flaky_retry.txt", sample=SAMPLES)
 
 # Use module for quality checking
@@ -83,6 +85,9 @@ module quality_check:
     snakefile: "modules/quality_check/Snakefile"
 
 use rule * from quality_check as qc_*
+
+# Exercise include parsing plus Snakemake's runtime checkpoint DAG expansion.
+include: "rules/checkpoint.smk"
 
 rule create_data:
     output:

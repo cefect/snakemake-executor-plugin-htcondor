@@ -49,5 +49,6 @@ COPY github_scripts/Snakefile \
      /home/submituser/torture-test/
 COPY github_scripts/scripts /home/submituser/torture-test/scripts
 COPY github_scripts/modules /home/submituser/torture-test/modules
+COPY github_scripts/rules /home/submituser/torture-test/rules
 RUN chown -R submituser:submituser /home/submituser/torture-test \
     && chmod +x /home/submituser/torture-test/*.sh

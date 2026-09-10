@@ -5,6 +5,9 @@ Unit tests for file transfer functionality in HTCondor executor.
 import tempfile
 import os
 from unittest.mock import Mock
+
+import pytest
+
 from snakemake_executor_plugin_htcondor import Executor
 
 
@@ -924,7 +927,7 @@ class TestFileTransferLogging:
 
 
 class TestModuleSnakefileDetection:
-    """Test the _add_module_snakefiles method for detecting module Snakefiles."""
+    """Test recursive detection of module and included Snakefiles."""
 
     def setup_method(self):
         """Setup mock executor and temporary files for testing."""
@@ -998,6 +1001,35 @@ module quality_check:
 
         assert len(transfer_list) == 1
         assert module_snakefile in transfer_list
+
+    @pytest.mark.parametrize(
+        "quote",
+        [
+            pytest.param('"', id="double_quotes"),
+            pytest.param("'", id="single_quotes"),
+        ],
+    )
+    def test_detects_nested_includes(self, quote):
+        """Test that literal includes are found recursively and resolved locally."""
+        main_snakefile = os.path.join(self.temp_dir, "Snakefile")
+        rules_dir = os.path.join(self.temp_dir, "rules")
+        nested_dir = os.path.join(rules_dir, "nested")
+        os.makedirs(nested_dir, exist_ok=True)
+        first_include = os.path.join(rules_dir, "first.smk")
+        nested_include = os.path.join(nested_dir, "second.smk")
+
+        with open(main_snakefile, "w") as f:
+            f.write(f"include: {quote}rules/first.smk{quote}\n")
+        with open(first_include, "w") as f:
+            f.write(f"include: {quote}nested/second.smk{quote}\n")
+        with open(nested_include, "w") as f:
+            f.write("rule test:\n    output: 'test.txt'\n")
+
+        transfer_list = []
+        self.executor._add_module_snakefiles(main_snakefile, transfer_list)
+
+        assert isinstance(transfer_list, list)
+        assert transfer_list == [first_include, nested_include]
 
     def test_detects_multiple_modules(self):
         """Test detection of multiple module declarations."""

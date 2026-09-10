@@ -161,6 +161,7 @@ docker compose down -v
 | `cleanup.sh` | Removes generated outputs and `/staging/torture-test`. |
 | `scripts/` | `process_sample{1,2}.py` (wildcard-selected) + `stats_helpers.py`. |
 | `modules/quality_check/` | A module + nested `validation/` module. |
+| `rules/checkpoint.smk` | An included checkpoint with runtime DAG expansion. |
 | `pool/docker-compose.yml` | The cm/ap/ep pool definition. |
 | `pool/Dockerfile.ap` | AP image: schedd + snakemake + plugin. |
 | `pool/Dockerfile.ep` | EP image: startd + python + snakemake. |

@@ -396,16 +396,15 @@ class Executor(RemoteExecutor):
         visited: Optional[set] = None,
     ):
         """
-        Recursively parse Snakefile to find module declarations and add their Snakefiles.
-        We're using this approach because it wasn't obvious how to access module Snakefiles
-        via the `job` object.
+        Recursively add literal module and include Snakefiles to the transfer list.
+        We're using this approach because it wasn't obvious how to access all workflow
+        source files via the `job` object.
 
         Module declarations in Snakemake look like:
             module name:
                 snakefile: "path/to/Snakefile"
 
-        This function works recursively - if a module Snakefile itself contains module
-        declarations, those will also be detected and transferred.
+        This function works recursively so nested modules and includes are transferred.
 
         Args:
             snakefile_path: Path to the Snakefile to parse
@@ -429,22 +428,30 @@ class Executor(RemoteExecutor):
             with open(snakefile_path, "r") as f:
                 content = f.read()
 
-            # Pattern to match: module name:\n    snakefile: "path" or snakefile: 'path'
-            # Handles both single and double quotes
-            pattern = r'module\s+\w+:\s*\n\s+snakefile:\s*["\']([^"\']+)["\']'
-            matches = re.findall(pattern, content, re.MULTILINE)
+            # Find literal module and include paths; both resolve from this file's directory.
+            patterns = (
+                r'module\s+\w+:\s*\n\s+snakefile:\s*["\']([^"\']+)["\']',
+                r'include:\s*["\']([^"\']+)["\']',
+            )
+            matches = [
+                match
+                for pattern in patterns
+                for match in re.findall(pattern, content, re.MULTILINE)
+            ]
 
-            for module_snakefile in matches:
-                # Module Snakefile paths are relative to the current Snakefile directory
-                if not isabs(module_snakefile):
+            for workflow_snakefile in matches:
+                if not isabs(workflow_snakefile):
                     snakefile_dir = normpath(join(snakefile_path, ".."))
-                    module_snakefile = join(snakefile_dir, module_snakefile)
+                    workflow_snakefile = join(snakefile_dir, workflow_snakefile)
+                workflow_snakefile = normpath(workflow_snakefile)
 
-                self.logger.debug(f"Found module Snakefile: {module_snakefile}")
-                self._add_file_if_transferable(module_snakefile, transfer_list)
+                if workflow_snakefile in visited:
+                    continue
 
-                # Recursively check if this module Snakefile has its own modules
-                self._add_module_snakefiles(module_snakefile, transfer_list, visited)
+                self.logger.debug(f"Found workflow Snakefile: {workflow_snakefile}")
+                self._add_file_if_transferable(workflow_snakefile, transfer_list)
+
+                self._add_module_snakefiles(workflow_snakefile, transfer_list, visited)
         except Exception as e:
             self.logger.warning(f"Error parsing Snakefile for modules: {e}")
 
@@ -689,8 +696,7 @@ class Executor(RemoteExecutor):
         main_snakefile = self.get_snakefile()
         self._add_file_if_transferable(main_snakefile, transfer_input_files)
 
-        # Add module Snakefiles by parsing the main Snakefile
-        # Module declarations look like: module name:\n    snakefile: "path/to/Snakefile"
+        # Add module and included Snakefiles by parsing the workflow sources.
         self._add_module_snakefiles(main_snakefile, transfer_input_files)
 
         # Process input files

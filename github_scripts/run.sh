@@ -109,7 +109,35 @@ fi
 echo "PASS: local() input ran on AP; normal and workflow.source_path inputs ran on EP"
 
 # -----------------------------------------------------------------------------
-# Post-run verification 2: Re-run idempotency
+# Post-run verification 2: include + checkpoint runtime DAG expansion
+# -----------------------------------------------------------------------------
+echo ""
+echo "=== Included checkpoint DAG expansion check ==="
+
+CHECKPOINT_PASS=true
+for sample in sample1 sample2; do
+    checkpoint_output="output/${sample}_checkpoint.txt"
+    if [ "$(grep -c '^item=' "$checkpoint_output")" -eq 2 ] \
+       && grep -qx "item=alpha" "$checkpoint_output" \
+       && grep -qx "item=beta" "$checkpoint_output" \
+       && [ "$(grep -c '^checkpoint_ep_marker=present$' "$checkpoint_output")" -eq 2 ] \
+       && [ "$(grep -c '^process_ep_marker=present$' "$checkpoint_output")" -eq 2 ] \
+       && grep -qx "collect_ep_marker=present" "$checkpoint_output" \
+       && ! grep -q 'condor_scratch=absent' "$checkpoint_output"; then
+        echo "PASS: $sample checkpoint and its two dynamic jobs ran on EPs"
+    else
+        echo "FAIL: $sample did not prove included checkpoint execution"
+        cat "$checkpoint_output" 2>/dev/null || true
+        CHECKPOINT_PASS=false
+    fi
+done
+
+if [ "$CHECKPOINT_PASS" = false ]; then
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Post-run verification 3: Re-run idempotency
 # -----------------------------------------------------------------------------
 # A dry-run immediately after a successful run should report "Nothing to be
 # done."  If the executor stomped mtimes during output transfer (the pre-fix
