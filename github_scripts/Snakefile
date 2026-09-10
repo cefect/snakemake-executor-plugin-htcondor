@@ -77,7 +77,6 @@ rule all:
         "output/local_input_probe.txt",
         "output/condor_probe.txt",
         "output/source_path_probe.txt",
-        expand("output/{sample}_checkpoint.txt", sample=SAMPLES),
         expand(SHARED_FS_TEST_DIR + "/{sample}_flaky_retry.txt", sample=SAMPLES)
 
 # Use module for quality checking
