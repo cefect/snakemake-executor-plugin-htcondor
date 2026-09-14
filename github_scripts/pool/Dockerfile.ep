@@ -6,9 +6,11 @@
 # can run them. It does NOT need the executor plugin (the plugin only runs on
 # the AP). The base image's CMD (/start.sh -> supervisord -> startd) is kept.
 #
-# Pinned to a specific HTCondor version (not :latest) so CI builds are
-# reproducible and can't break from an upstream :latest republish.
-FROM htcondor/execute:25.12.2-el9
+
+# Match the AP and central-manager 25.12.2-el9 pin for reproducible CI.
+ARG HTCONDOR_VERSION
+FROM htcondor/execute:${HTCONDOR_VERSION}
+
 
 USER root
 
@@ -18,9 +20,6 @@ RUN dnf install -y \
     && dnf clean all \
     && pip3.11 install --no-cache-dir "snakemake>=9.6.2" \
     && ln -sf /usr/bin/python3.11 /usr/local/bin/python
-
-# EP-only provenance marker for the local() execution-placement regression test.
-RUN touch /etc/torture-ep-marker
 
 # Advertise a custom machine attribute so the torture test's attribute_check
 # rule can require it (requirements="TortureTestEP == true"). Because the job
