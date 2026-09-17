@@ -15,9 +15,11 @@ from snakemake_interface_common.exceptions import WorkflowError  # noqa
 
 import htcondor2 as htcondor
 from htcondor2 import JobEventLog, JobEventType
+import classad2 as classad
 import traceback
-from os.path import join, isabs, relpath, normpath, exists
+from os.path import join, isabs, relpath, normpath, exists, isdir
 from os import makedirs, sep
+import os
 import re
 import sys
 
@@ -218,6 +220,21 @@ class Executor(RemoteExecutor):
 
         # Path to the unified log file that tracks all jobs submitted
         self._unified_log_file = join(self.jobDir, "snakemake-rules.log")
+
+        # Get mgmt_id from _condor_job_ad env variable and making it optional for those who just use condor_submit
+        self._mgmt_id = None
+        job_ad_path = os.environ.get("_CONDOR_JOB_AD")
+        if job_ad_path:
+            try:
+                with open(job_ad_path) as f:
+                    job_ad = classad.parseOne(f)
+                self._mgmt_id = int(job_ad["ClusterId"])
+            except (OSError, KeyError, ValueError):
+                self._mgmt_id = None
+        if self._mgmt_id is not None:
+            htcondor.Schedd().edit(
+                f"ClusterId == {self._mgmt_id}", "SnakeMgmtPID", os.getpid()
+            )
 
     def _validate_held_timeout(self):
         """Validate the held job timeout configuration.
@@ -1004,6 +1021,81 @@ class Executor(RemoteExecutor):
         self.logger.debug(f"Config files to transfer: {config_paths_for_transfer}")
         return job_args, config_paths_for_transfer
 
+    def _strip_ap_local_path_args(self, job_args: str) -> str:
+        """
+        Drop absolute path arguments that resolve on the Access Point but are not
+        on a filesystem shared with the Execution Point.
+
+        Snakemake renders the spawned EP command on the AP and forwards several
+        location settings as absolute AP paths (e.g. ``--apptainer-prefix``, filled
+        from the inherited ``APPTAINER_CACHEDIR``, plus ``--conda-prefix``,
+        ``--shadow-prefix``, ``--directory``); those paths don't exist on the EP
+        and break the invocation. Rather than special-casing each setting, every
+        ``--flag <value>`` is judged purely by what the value is:
+
+        * not absolute, or under a configured shared-fs prefix -> reachable on the
+          EP (relative paths resolve under the job scratch dir; shared paths are
+          mounted on both) -> keep;
+        * does not resolve on the AP -> something the user expects elsewhere (baked
+          into their container, on CVMFS, node-local) -> keep;
+        * an AP-local directory, not shared -> a cache/scratch/workdir location ->
+          drop, so the EP falls back to its own default;
+        * an AP-local file, not shared -> unexpected here (content is passed as a
+          relative path or transferred separately) -> keep, but warn so a new leak
+          surfaces instead of breaking silently.
+
+        Only single-valued flags are considered, so list arguments (e.g.
+        ``--configfiles a b``) are never partially rewritten. Runs on the AP, and
+        only without a (fully) shared filesystem (the caller skips it otherwise).
+
+        Args:
+            job_args: The spawned-job argument string (prefix-stripped, sanitized).
+
+        Returns:
+            ``job_args`` with AP-local directory arguments removed.
+        """
+        tokens = job_args.split()
+        kept = []
+        i = 0
+        n = len(tokens)
+        while i < n:
+            flag = tokens[i]
+            value = tokens[i + 1] if i + 1 < n else None
+            after = tokens[i + 2] if i + 2 < n else None
+            # "--flag VALUE" where VALUE is not itself a flag and is followed by a
+            # flag or the end of the command. This guard means a list argument is
+            # never partially rewritten.
+            single_valued = (
+                flag.startswith("--")
+                and value is not None
+                and not value.startswith("--")
+                and (after is None or after.startswith("--"))
+            )
+            if single_valued and isabs(value):
+                if is_shared_fs(value, self.shared_fs_prefixes):
+                    pass  # mounted on both AP and EP -> reachable, keep
+                elif isdir(value):
+                    self.logger.debug(
+                        f"Dropping {flag} '{value}' from the spawned command: an "
+                        "Access-Point-local directory not on a shared filesystem, "
+                        "so it will not exist on the Execution Point. The Execution "
+                        "Point will use its own default location."
+                    )
+                    i += 2
+                    continue
+                elif exists(value):
+                    self.logger.warning(
+                        f"Argument {flag} '{value}' is an absolute Access-Point "
+                        "path not on a shared filesystem; it will not exist on the "
+                        "Execution Point. Leaving it in place; declare it via "
+                        "--htcondor-shared-fs-prefixes if it is in fact shared."
+                    )
+                # else: does not resolve on the AP (CVMFS, container-baked,
+                # node-local, or to be created on the EP) -> keep untouched.
+            kept.append(flag)
+            i += 1
+        return " ".join(kept)
+
     def _get_base_exec_and_args(self, job: JobExecutorInterface) -> tuple[str, str]:
         """
         Get the base executable and arguments for the HTCondor job.
@@ -1148,6 +1240,11 @@ class Executor(RemoteExecutor):
         # Add config files to the transfer input list
         transfer_input_files.extend(config_paths)
 
+        # Drop absolute path args that resolve on the AP but aren't on a shared
+        # filesystem: they are AP-local and won't exist on the EP. Paths not on the
+        # AP (CVMFS, container-baked, node-local) pass through unchanged.
+        job_args = self._strip_ap_local_path_args(job_args)
+
         self.logger.debug(f"Final arguments: {job_args}")
         self.logger.debug(
             f"Final transfer_input_files ({len(transfer_input_files)}): {transfer_input_files}"
@@ -1230,6 +1327,9 @@ class Executor(RemoteExecutor):
             "error": join(rule_log_dir, f"{rule_name}-{job.jobid}_$(ClusterId).err"),
             "request_cpus": str(job.threads),
         }
+        # Associate this job with its management id if there is one
+        if self._mgmt_id is not None:
+            submit_dict["+SnakeManagerJobId"] = self._mgmt_id
 
         # Supported universes for HTCondor
         supported_universes = [
