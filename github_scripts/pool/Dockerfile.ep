@@ -18,7 +18,7 @@ RUN dnf install -y \
         python3.11 \
         python3.11-pip \
     && dnf clean all \
-    && pip3.11 install --no-cache-dir "snakemake>=9.6.2" \
+    && pip3.11 install --no-cache-dir "snakemake==9.27.0" \
     && ln -sf /usr/bin/python3.11 /usr/local/bin/python
 
 # EP-only provenance marker for the local() execution-placement regression test.

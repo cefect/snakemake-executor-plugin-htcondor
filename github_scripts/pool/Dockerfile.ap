@@ -32,7 +32,7 @@ RUN dnf install -y \
 ENV POETRY_DYNAMIC_VERSIONING_BYPASS=0.0.0
 COPY pyproject.toml README.md /opt/plugin/
 COPY snakemake_executor_plugin_htcondor /opt/plugin/snakemake_executor_plugin_htcondor
-RUN pip3.11 install --no-cache-dir "snakemake>=9.6.2" /opt/plugin \
+RUN pip3.11 install --no-cache-dir "snakemake==9.27.0" /opt/plugin \
     && ln -sf /usr/bin/python3.11 /usr/local/bin/python
 
 # AP-only provenance marker for the local() execution-placement regression test.
