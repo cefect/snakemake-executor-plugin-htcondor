@@ -22,6 +22,7 @@ class TestPrepareConfigFilesForTransfer:
         """Setup mock executor for testing."""
         self.executor = Mock(spec=Executor)
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.logger = Mock()
         # Default workdir_init - the directory where snakemake was invoked
         self.executor.workflow.workdir_init = "/home/user/project"
@@ -316,6 +317,7 @@ class TestConfigFilePathsIntegration:
         """Setup mock executor with full context."""
         self.executor = Mock(spec=Executor)
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.workdir_init = "/home/user/project"
         self.executor.workflow.storage_settings = Mock()
         self.executor.workflow.storage_settings.shared_fs_usage = []  # "none"
@@ -457,6 +459,7 @@ class TestFilesystemModes:
         """Setup mock executor with all required methods."""
         self.executor = Mock(spec=Executor)
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.workdir_init = "/home/user/project"
         self.executor.workflow.configfiles = ["/home/user/project/config.yaml"]
         self.executor.shared_fs_prefixes = []

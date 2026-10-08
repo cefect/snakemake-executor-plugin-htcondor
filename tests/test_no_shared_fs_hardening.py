@@ -36,6 +36,7 @@ def _make_executor(workdir="/ap/workdir", shared_prefixes=None):
     executor.logger = Mock()
     executor.shared_fs_prefixes = shared_prefixes or []
     executor.workflow = Mock()
+    executor.workflow.dag.get_unneeded_temp_files.return_value = []
     executor.workflow.configfiles = []
     executor.workflow.workdir_init = workdir
     executor.get_snakefile = Mock(return_value="Snakefile")

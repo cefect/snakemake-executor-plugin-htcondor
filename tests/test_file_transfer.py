@@ -237,6 +237,7 @@ class TestScriptTransfer:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.workflow.workdir_init = "/test/workdir"
         self.executor.get_snakefile = Mock(return_value="Snakefile")
@@ -334,6 +335,7 @@ class TestNotebookTransfer:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.workflow.workdir_init = "/test/workdir"
         self.executor.get_snakefile = Mock(return_value="Snakefile")
@@ -408,6 +410,7 @@ class TestScriptBasedirResolution:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.get_snakefile = Mock(return_value="Snakefile")
 
@@ -615,6 +618,7 @@ class TestJobWrapperTransfer:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.workflow.workdir_init = "/test/workdir"
         self.executor.get_snakefile = Mock(return_value="Snakefile")
@@ -712,6 +716,7 @@ class TestCustomTransferResources:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.workflow.workdir_init = "/test/workdir"
         self.executor.get_snakefile = Mock(return_value="Snakefile")
@@ -884,6 +889,7 @@ class TestFileTransferLogging:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.workflow.workdir_init = "/test/workdir"
         self.executor.get_snakefile = Mock(return_value="Snakefile")
@@ -1270,6 +1276,7 @@ class TestAbsolutePathWarning:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.get_snakefile = Mock(return_value="Snakefile")
 

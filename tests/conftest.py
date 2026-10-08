@@ -23,6 +23,7 @@ def create_mock_executor(shared_fs_prefixes=None):
     executor.logger = Mock()
     executor.shared_fs_prefixes = shared_fs_prefixes or []
     executor.workflow = Mock()
+    executor.workflow.dag.get_unneeded_temp_files.return_value = []
     executor.workflow.configfiles = []
     executor.workflow.workdir_init = "/test/workdir"
     executor.get_snakefile = Mock(return_value="Snakefile")
