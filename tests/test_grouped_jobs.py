@@ -4,6 +4,8 @@ Unit tests for grouped job file transfer functionality in HTCondor executor.
 
 import tempfile
 import os
+
+import pytest
 from conftest import (
     create_mock_executor,
     create_mock_individual_job,
@@ -440,40 +442,37 @@ class TestGroupedJobComplexScenarios:
         # A remap must exist for every transferred output.
         assert len(remaps) == len(transfer_output)
 
-    def test_temp_outputs_excluded_from_transfer(self):
-        """Test that temp() outputs are excluded from transfer_output_files.
+    @pytest.mark.parametrize(
+        "grouped",
+        [
+            pytest.param(True, id="group_internal_and_external_temp"),
+            pytest.param(False, id="ungrouped_downstream_temp"),
+        ],
+    )
+    def test_temp_outputs_transferred_only_when_needed(self, grouped):
+        """Test that only temp() outputs the EP deletes are excluded from transfer.
 
-        temp() outputs are deleted by the EP during group execution after being
-        consumed by their downstream rule within the group.  If they appear in
-        transfer_output_files, HTCondor would error when it can't find the
-        already-deleted file at transfer time.
+        The EP deletes exactly the temp outputs listed by
+        ``dag.get_unneeded_temp_files`` (passed as --unneeded-temp-files).  Any
+        other temp output survives on the EP because a later job needs it, so it
+        must be transferred back for that job to consume.
         """
-        from unittest.mock import Mock
+        # payload.txt is consumed by a downstream job; internal.txt is not.
+        needed, unneeded = "output/payload.txt", "output/internal.txt"
+        produce_job = create_mock_individual_job(output_files=[needed, unneeded])
+        if grouped:
+            job = create_mock_group_job(
+                [
+                    produce_job,
+                    create_mock_individual_job(output_files=["output/preview.png"]),
+                ],
+                external_outputs=["output/preview.png"],
+            )
+        else:
+            job = produce_job
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = [unneeded]
 
-        # Create a mock path object that has flags.temp = True
-        temp_path = Mock()
-        temp_path.__str__ = Mock(return_value="output/temp_intermediate.txt")
-        temp_path.flags = {"temp": True}
+        _, transfer_output, _ = self.executor._get_files_for_transfer(job)
 
-        # Create individual jobs: one with a temp output, one with a normal output
-        temp_job = create_mock_individual_job(output_files=[temp_path])
-        normal_job = create_mock_individual_job(
-            output_files=["output/final_result.txt"]
-        )
-
-        group_job = create_mock_group_job(
-            [temp_job, normal_job],
-            external_outputs=["output/final_result.txt"],
-        )
-
-        _, transfer_output, remaps = self.executor._get_files_for_transfer(group_job)
-
-        # Normal output should be transferred
-        assert "output/final_result.txt" in transfer_output
-        # Temp output must NOT be transferred
-        assert "output/temp_intermediate.txt" not in transfer_output, (
-            "temp() outputs must be excluded — they are deleted on the EP "
-            "during group execution and cannot be transferred."
-        )
-        # Remaps should only cover non-temp outputs
-        assert len(remaps) == len(transfer_output)
+        assert needed in transfer_output
+        assert unneeded not in transfer_output

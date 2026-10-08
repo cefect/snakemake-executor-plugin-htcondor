@@ -303,13 +303,13 @@ class Executor(RemoteExecutor):
         job: Optional[JobExecutorInterface] = None,
         validate_exists: bool = True,
         warn_absolute: bool = False,
-        skip_temp: bool = False,
+        unneeded_temp: Optional[set] = None,
     ) -> bool:
         """
         Add a file to the transfer list if it's not on a shared filesystem.
 
         This is the single gatekeeper for both input and output transfer lists.
-        It handles temp-file skipping, shared-FS filtering, absolute-path
+        It handles unneeded-temp skipping, shared-FS filtering, absolute-path
         warnings, normalization, and deduplication.
 
         Args:
@@ -322,9 +322,10 @@ class Executor(RemoteExecutor):
                 Set to False for output files that do not exist yet.
             warn_absolute: If True, log a warning when the path is absolute and
                 not on a shared filesystem prefix.
-            skip_temp: If True, skip paths whose ``.flags["temp"]`` is set.
-                Use this for output files — temp() outputs are deleted on the EP
-                during group execution and must not be listed for transfer.
+            unneeded_temp: Normalized paths of temp() outputs the EP deletes
+                (``dag.get_unneeded_temp_files``).  These must not be listed
+                for transfer; other temp() outputs survive on the EP and are
+                transferred so downstream jobs can consume them.
 
         Returns:
             True if the file was added to *transfer_list*, False if it was
@@ -333,22 +334,6 @@ class Executor(RemoteExecutor):
         # Explicitly handle empty/None filepaths
         if file_path is None or str(file_path).strip() == "":
             self.logger.debug("Skipping empty or None filepath")
-            return False
-
-        # Skip temp() outputs — the EP deletes them during group execution once
-        # they've been consumed by their downstream rule.  Declaring them in
-        # transfer_output_files would cause HTCondor to error when it can't find
-        # the already-deleted file at transfer time.  This check must happen
-        # before the str() conversion so we can inspect the Snakemake path
-        # object's .flags attribute.
-        if (
-            skip_temp
-            and hasattr(file_path, "flags")
-            and file_path.flags.get("temp", False)
-        ):
-            self.logger.debug(
-                f"Skipping temp file (deleted on EP during execution): {file_path}"
-            )
             return False
 
         file_path = str(file_path).strip()
@@ -369,6 +354,15 @@ class Executor(RemoteExecutor):
 
         # Normalize path to handle './', '../', '//' etc.
         file_path = normpath(file_path)
+
+        # Skip temp() outputs the EP deletes once no consumer outside the job
+        # needs them.  Declaring them in transfer_output_files would cause
+        # HTCondor to error when it can't find the deleted file at transfer time.
+        if unneeded_temp and file_path in unneeded_temp:
+            self.logger.debug(
+                f"Skipping unneeded temp file (deleted on EP): {file_path}"
+            )
+            return False
 
         # Check if already in transfer list (after normalization)
         if file_path in transfer_list:
@@ -775,13 +769,21 @@ class Executor(RemoteExecutor):
                     seen_paths.add(p_str)
                     all_output_paths.append(p)
 
+        # Temp outputs the EP deletes: the same set Snakemake passes to the EP as
+        # --unneeded-temp-files.  The EP keeps every other temp output (e.g. one
+        # consumed by a later job), so those are transferred and Snakemake on the
+        # AP removes them after their final consumer succeeds.
+        unneeded_temp = {
+            normpath(str(f)) for f in self.workflow.dag.get_unneeded_temp_files(job)
+        }
+
         for path in all_output_paths:
             self._add_file_if_transferable(
                 path,
                 transfer_output_files,
                 validate_exists=False,
                 warn_absolute=True,
-                skip_temp=True,
+                unneeded_temp=unneeded_temp,
             )
 
         # Process script and notebook files from all rules in the job.

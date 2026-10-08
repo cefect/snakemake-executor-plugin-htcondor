@@ -39,6 +39,7 @@ repos:
         name: Format markdown files
         additional_dependencies:
         -   mdformat-simple-breaks
+        -   mdformat-frontmatter
         args: [--wrap, "keep"] #leaves line breaks exactly as what's written
         files: \.md$
         #excluding README.md to prevent unintentional break in text format

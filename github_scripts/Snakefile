@@ -27,6 +27,7 @@
 #   - Serial grouped jobs (linear chain: A → B → C)
 #   - Parallel grouped jobs (fan-out: A splits into B, C, D that run in parallel, then E aggregates)
 #   - temp() intermediate within a group (excluded from HTCondor transfer list)
+# - temp() handoff between ungrouped jobs (transferred, then removed on the AP)
 # - Shared-directory mtime correctness (issue #48 regression)
 #   - Multiple consecutive rules that read from AND write to the same directory
 #   - Verifies that output file transfer does not touch sibling input files
@@ -64,6 +65,7 @@ rule all:
         expand("output/{sample}_qc.txt", sample=SAMPLES),
         expand("output/{sample}_validated.txt", sample=SAMPLES),
         expand("output/{sample}_grouped_final.txt", sample=SAMPLES),
+        expand("output/{sample}_temp_result.txt", sample=SAMPLES),
         expand("output/{sample}_parallel_final.txt", sample=SAMPLES),
         expand("output/{sample}_mtime_check.txt", sample=SAMPLES),
         expand("output/{sample}_env_check.txt", sample=SAMPLES),
@@ -237,10 +239,10 @@ rule grouped_step1:
         "data/{sample}_numbers.txt"
     output:
         # temp() marks this as a temporary file.  Snakemake deletes it on the EP
-        # after grouped_step2 consumes it.  The executor must NOT list temp outputs
-        # in transfer_output_files, or HTCondor will error when the file is missing
-        # at transfer time.  This tests the skip_temp code path in
-        # _add_file_if_transferable().
+        # after grouped_step2 consumes it (it is in --unneeded-temp-files).  The
+        # executor must NOT list it in transfer_output_files, or HTCondor will
+        # error when the file is missing at transfer time.  This tests the
+        # unneeded_temp code path in _add_file_if_transferable().
         temp("output/{sample}_grouped_step1.txt")
     group: "data_pipeline"
     resources:
@@ -294,6 +296,43 @@ rule grouped_step3:
         echo "Pipeline completed successfully" >> {output}
         echo "" >> {output}
         cat {input} >> {output}
+        """
+
+# Ungrouped temp() handoff (issue #6).  temp_produce and temp_consume run as
+# separate HTCondor jobs, so the payload is needed outside its producer job: the
+# EP keeps it, the executor must transfer it back to the AP, and Snakemake on the
+# AP removes it after temp_consume succeeds.  run.sh verifies the payload is gone
+# while the durable preview and result remain.
+rule temp_produce:
+    input:
+        "data/{sample}_numbers.txt"
+    output:
+        payload=temp("output/{sample}_temp_payload.txt"),
+        preview="output/{sample}_temp_preview.txt"
+    resources:
+        universe="vanilla",
+        htcondor_request_disk_mb=1024,
+        htcondor_request_mem_mb=512,
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        cp {input} {output.payload}
+        echo "preview of {wildcards.sample}" > {output.preview}
+        """
+
+rule temp_consume:
+    input:
+        "output/{sample}_temp_payload.txt"
+    output:
+        "output/{sample}_temp_result.txt"
+    resources:
+        universe="vanilla",
+        htcondor_request_disk_mb=1024,
+        htcondor_request_mem_mb=512,
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        cp {input} {output}
         """
 
 

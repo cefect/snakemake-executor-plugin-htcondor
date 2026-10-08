@@ -123,6 +123,7 @@ class TestGetFilesForTransfer:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = ["/staging", "/shared/"]
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.configfiles = []
         self.executor.workflow.workdir_init = "/home/user/workflow"
         self.executor.get_snakefile = Mock(return_value="/home/user/Snakefile")
@@ -486,6 +487,7 @@ class TestPrepareConfigFilesForTransferBasic:
         """Setup mock executor for testing."""
         self.executor = Mock(spec=Executor)
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.logger = Mock()
         self.executor.workflow.workdir_init = (
             "/home/user"  # Required for relpath calculation
@@ -548,6 +550,7 @@ class TestValidateSharedFsConfiguration:
         self.executor.logger = Mock()
         self.executor.shared_fs_prefixes = []
         self.executor.workflow = Mock()
+        self.executor.workflow.dag.get_unneeded_temp_files.return_value = []
         self.executor.workflow.storage_settings = Mock()
         self.executor.workflow.storage_settings.shared_fs_usage = []
 

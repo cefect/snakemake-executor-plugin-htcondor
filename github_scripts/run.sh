@@ -109,6 +109,31 @@ fi
 echo "PASS: local() input ran on AP; normal and workflow.source_path inputs ran on EP"
 
 # -----------------------------------------------------------------------------
+# Post-run verification 1b: Ungrouped temp() handoff (issue #6)
+# -----------------------------------------------------------------------------
+# temp_consume ran on the EP from a temp() payload produced by a separate
+# HTCondor job, so the payload was transferred back to the AP.  Snakemake must
+# then have removed it, while the durable preview and result remain.  The
+# idempotency check below also proves the missing payload triggers no rerun.
+echo ""
+echo "=== Ungrouped temp() handoff check ==="
+
+for sample in sample1 sample2; do
+    if [ -e "output/${sample}_temp_payload.txt" ]; then
+        echo "FAIL: output/${sample}_temp_payload.txt was not removed after its consumer"
+        exit 1
+    fi
+    for f in "output/${sample}_temp_preview.txt" "output/${sample}_temp_result.txt"; do
+        if [ ! -s "$f" ]; then
+            echo "FAIL: $f missing or empty"
+            exit 1
+        fi
+    done
+done
+
+echo "PASS: temp() payload transferred, consumed, and removed; durable outputs kept"
+
+# -----------------------------------------------------------------------------
 # Post-run verification 2: Re-run idempotency
 # -----------------------------------------------------------------------------
 # A dry-run immediately after a successful run should report "Nothing to be
