@@ -8,7 +8,9 @@
 #
 # Pinned to a specific HTCondor version (not :latest) so CI builds are
 # reproducible and can't break from an upstream :latest republish.
-FROM htcondor/execute:25.12.2-el9
+# Version comes from docker-compose.env (HTCONDOR_VERSION).
+ARG HTCONDOR_VERSION
+FROM htcondor/execute:${HTCONDOR_VERSION}
 
 USER root
 

@@ -5,7 +5,9 @@
 # supervisord -> condor daemons) is preserved.
 #
 # Pinned to a specific HTCondor version (not :latest) for reproducible CI builds.
-FROM htcondor/submit:25.12.2-el9
+# Version comes from docker-compose.env (HTCONDOR_VERSION).
+ARG HTCONDOR_VERSION
+FROM htcondor/submit:${HTCONDOR_VERSION}
 
 USER root
 
