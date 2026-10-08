@@ -4,9 +4,8 @@
 # COPY the plugin source and install it. The base image's CMD (/start.sh ->
 # supervisord -> condor daemons) is preserved.
 #
-
-# Pin a current HTCondor build for reproducible CI. 25.11.0-el9 fails
-# pool-password authentication in the torture-test pool (FS:1004).
+# Pinned to a specific HTCondor version (not :latest) for reproducible CI builds.
+# Version comes from docker-compose.env (HTCONDOR_VERSION).
 ARG HTCONDOR_VERSION
 FROM htcondor/submit:${HTCONDOR_VERSION}
 
@@ -36,12 +35,16 @@ COPY snakemake_executor_plugin_htcondor /opt/plugin/snakemake_executor_plugin_ht
 RUN pip3.11 install --no-cache-dir "snakemake>=9.6.2" /opt/plugin \
     && ln -sf /usr/bin/python3.11 /usr/local/bin/python
 
+# AP-only provenance marker for the local() execution-placement regression test.
+RUN touch /etc/torture-ap-marker
+
 # Drop the CI torture-test workflow into the submit user's home — a path NOT
 # under /staging, so its non-shared files are genuinely transferred. We COPY
 # the workflow files explicitly (not the whole github_scripts/ dir) so the
 # pool/ directory and the generated pool_password secret are never baked in.
 RUN mkdir -p /home/submituser/torture-test
 COPY github_scripts/Snakefile \
+     github_scripts/source_path_probe.txt \
      github_scripts/wrapper.sh \
      github_scripts/run.sh \
      github_scripts/cleanup.sh \
