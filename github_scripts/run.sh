@@ -263,5 +263,42 @@ else
     exit 1
 fi
 
+# -----------------------------------------------------------------------------
+# Post-run verification 6: Issue #9 unused temp() AP-validation reproducer
+# -----------------------------------------------------------------------------
+# The producer succeeds on the EP and intentionally removes issue9_unused.vrt
+# through --unneeded-temp-files.  The current Snakemake 9.27.0 AP postprocess
+# path nevertheless waits for every declared output, so the targeted workflow
+# must fail specifically because issue9_unused.vrt was not transferred.
+echo ""
+echo "=== Issue #9 reproducer: unused temp output fails AP validation ==="
+
+ISSUE9_RC=0
+ISSUE9_OUTPUT=$(snakemake \
+    output/issue9_done.txt \
+    --jobs 2 \
+    --executor htcondor \
+    --htcondor-jobdir logs \
+    --htcondor-held-timeout 120 \
+    --shared-fs-usage none \
+    --htcondor-shared-fs-prefixes "$SHARED_FS_PREFIX" \
+    --latency-wait 1 \
+    --verbose 2>&1) || ISSUE9_RC=$?
+
+if [ "$ISSUE9_RC" -eq 0 ]; then
+    echo "FAIL: issue #9 reproducer unexpectedly completed successfully"
+    echo "$ISSUE9_OUTPUT" | tail -50
+    exit 1
+fi
+
+if echo "$ISSUE9_OUTPUT" | grep -qi "missing files after" \
+    && echo "$ISSUE9_OUTPUT" | grep -q "output/issue9_unused.vrt"; then
+    echo "PASS: issue #9 reproduced (AP rejected the EP-deleted unused temp output)"
+else
+    echo "FAIL: issue #9 invocation failed for an unexpected reason (rc=$ISSUE9_RC)"
+    echo "$ISSUE9_OUTPUT" | tail -50
+    exit 1
+fi
+
 echo ""
 echo "=== All checks passed ==="

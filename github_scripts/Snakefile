@@ -28,6 +28,7 @@
 #   - Parallel grouped jobs (fan-out: A splits into B, C, D that run in parallel, then E aggregates)
 #   - temp() intermediate within a group (excluded from HTCondor transfer list)
 # - temp() handoff between ungrouped jobs (transferred, then removed on the AP)
+# - Unused temp() output AP-validation failure (issue #9 reproducer)
 # - Shared-directory mtime correctness (issue #48 regression)
 #   - Multiple consecutive rules that read from AND write to the same directory
 #   - Verifies that output file transfer does not touch sibling input files
@@ -333,6 +334,47 @@ rule temp_consume:
     shell:
         """
         cp {input} {output}
+        """
+
+
+# Issue #9 reproducer.  The producer creates an unused temp() file alongside a
+# temporary directory needed by the consumer and a durable manifest.  On the
+# EP, Snakemake deletes the unused file named by --unneeded-temp-files; the
+# executor therefore omits it from transfer.  Snakemake 9.27.0 then incorrectly
+# waits for that declared output during AP postprocessing and fails the job.
+# run.sh targets issue9_done separately and asserts this exact failure.
+rule issue9_produce:
+    output:
+        unused=temp("output/issue9_unused.vrt"),
+        assets=temp(directory("output/issue9_assets")),
+        manifest="output/issue9_manifest.txt"
+    resources:
+        universe="vanilla",
+        request_disk="1GB",
+        request_memory="512MB",
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        mkdir -p {output.assets}
+        echo "asset data" > {output.assets}/data.txt
+        echo "unused temp data" > {output.unused}
+        echo "persistent manifest" > {output.manifest}
+        """
+
+
+rule issue9_consume:
+    input:
+        assets="output/issue9_assets"
+    output:
+        "output/issue9_done.txt"
+    resources:
+        universe="vanilla",
+        request_disk="1GB",
+        request_memory="512MB",
+        job_wrapper="wrapper.sh"
+    shell:
+        """
+        cat {input.assets}/data.txt > {output}
         """
 
 

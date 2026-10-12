@@ -122,6 +122,11 @@ The workflow also covers (Tier 1 additions):
 1. **Negative test** — `run.sh` runs a deliberately-failing rule (`always_fail`,
    not in `rule all`) as a separate targeted invocation and asserts the workflow
    exits non-zero and surfaces the error (catches "hangs/swallows failures").
+1. **Issue #9 reproducer** — a targeted invocation creates an unused temporary
+   output alongside a needed temporary directory and a persistent manifest.
+   It asserts that Snakemake 9.27.0 currently rejects the successful EP job
+   during AP output validation because the unused temporary output was deleted
+   and deliberately omitted from transfer.
 
 > Note: `env_special_check` (#6) originally surfaced a real executor bug — env
 > values were delivered wrapped in literal double quotes because

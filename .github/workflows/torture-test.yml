@@ -4,8 +4,9 @@ name: Torture Test
 # + Execution Point) that shares only a single /staging path between the AP and
 # EP, then runs the "torture test" workflow against it. This exercises the
 # executor's hardest paths — file transfer, transfer_output_remaps, grouped jobs,
-# temp() exclusion, env-var injection, AP-side mtime correctness (issue #48), and
-# partial-shared-filesystem handling via --htcondor-shared-fs-prefixes.
+# temp() exclusion, unused-temp AP validation (issue #9), env-var injection,
+# AP-side mtime correctness (issue #48), and partial-shared-filesystem handling
+# via --htcondor-shared-fs-prefixes.
 #
 # See github_scripts/README.md for the design and how to reproduce it locally.
 
