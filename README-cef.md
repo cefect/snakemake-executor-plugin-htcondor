@@ -75,7 +75,7 @@ find .runner .credentials .credentials_rsaparams -depth -type f -print
 ```
 
 3. Open [repository runner settings](https://github.com/cefect/snakemake-executor-plugin-htcondor/settings/actions/runners/new), select Linux / x64, and obtain a fresh registration token.
-Use the existing installation; enter the token at the interactive prompt below rather than storing it in this README.
+   Use the existing installation; enter the token at the interactive prompt below rather than storing it in this README.
 
 ```bash
 # Register interactively, accepting the default name and work directory.

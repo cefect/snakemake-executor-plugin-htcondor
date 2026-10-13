@@ -17,7 +17,10 @@
 
 # Local test environment
 
+- `github_scripts/.snakemake` may be owned by a container user and unwritable locally.
+  For isolated dry-run probes, pass the absolute `github_scripts/Snakefile` path with `--snakefile` and a fresh writable directory with `--directory` instead of changing its ownership.
 - Conda env `htcondor-plugin` (Python 3.11) has the project installed editable with dev deps (pytest, snakemake, pre-commit, coverage).
 - Unit tests: `conda run -n htcondor-plugin python -m pytest tests/`. `integration_tests/` need a live HTCondor AP; rely on CI.
 - The default `~/.cache/pre-commit` hook envs are broken (missing `libpython3.11.so`); run pre-commit with a separate cache:
   `PRE_COMMIT_HOME=$HOME/.cache/pre-commit-htcondor-plugin conda run -n htcondor-plugin pre-commit run --all-files`
+- If Black stalls in the managed sandbox, stop that run and retry the full suite with approved host execution; the existing hook environments work there.

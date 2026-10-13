@@ -449,14 +449,8 @@ class TestGroupedJobComplexScenarios:
             pytest.param(False, id="ungrouped_downstream_temp"),
         ],
     )
-    def test_temp_outputs_transferred_only_when_needed(self, grouped):
-        """Test that only temp() outputs the EP deletes are excluded from transfer.
-
-        The EP deletes exactly the temp outputs listed by
-        ``dag.get_unneeded_temp_files`` (passed as --unneeded-temp-files).  Any
-        other temp output survives on the EP because a later job needs it, so it
-        must be transferred back for that job to consume.
-        """
+    def test_all_temp_outputs_transferred(self, grouped):
+        """Transfer needed and unneeded temps for AP validation and cleanup."""
         # payload.txt is consumed by a downstream job; internal.txt is not.
         needed, unneeded = "output/payload.txt", "output/internal.txt"
         produce_job = create_mock_individual_job(output_files=[needed, unneeded])
@@ -475,4 +469,4 @@ class TestGroupedJobComplexScenarios:
         _, transfer_output, _ = self.executor._get_files_for_transfer(job)
 
         assert needed in transfer_output
-        assert unneeded not in transfer_output
+        assert unneeded in transfer_output

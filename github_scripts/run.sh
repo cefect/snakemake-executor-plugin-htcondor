@@ -264,41 +264,72 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Post-run verification 6: Issue #9 unused temp() AP-validation reproducer
+# Post-run verification 6: Issue #9 output lifecycle (real EP and AP schedulers)
 # -----------------------------------------------------------------------------
-# The producer succeeds on the EP and intentionally removes issue9_unused.vrt
-# through --unneeded-temp-files.  The current Snakemake 9.27.0 AP postprocess
-# path nevertheless waits for every declared output, so the targeted workflow
-# must fail specifically because issue9_unused.vrt was not transferred.
-echo ""
-echo "=== Issue #9 reproducer: unused temp output fails AP validation ==="
+# ep.sha256 is written by the wrapper AFTER EP Snakemake exits successfully.
+# These checks run AFTER the AP scheduler exits, so retention and cleanup are
+# observed at separate lifecycle boundaries, not inferred from transfer lists.
+set -o pipefail
+for case in ungrouped grouped retained; do
+    echo "=== Issue #9 lifecycle: $case ==="
+    ISSUE9_ARGS=()
+    if [ "$case" = retained ]; then
+        ISSUE9_ARGS+=(--notemp)
+    fi
+    snakemake "output/issue9/$case/done.txt" \
+        --jobs 2 --executor htcondor \
+        --htcondor-jobdir "logs/issue9-$case" \
+        --htcondor-held-timeout 30 --shared-fs-usage none \
+        --htcondor-shared-fs-prefixes "$SHARED_FS_PREFIX" \
+        --latency-wait 1 --verbose "${ISSUE9_ARGS[@]}" \
+        2>&1 | tee "logs/issue9-$case.log"
 
-ISSUE9_RC=0
-ISSUE9_OUTPUT=$(snakemake \
-    output/issue9_done.txt \
-    --jobs 2 \
-    --executor htcondor \
-    --htcondor-jobdir logs \
-    --htcondor-held-timeout 120 \
-    --shared-fs-usage none \
+    # Verify exact worker-side contents for both temporary and durable outputs.
+    for path in unused.vrt assets/data.txt manifest.txt; do
+        case "$path" in
+            unused.vrt) content="unused temp data" ;;
+            assets/data.txt) content="asset data" ;;
+            manifest.txt) content="persistent manifest" ;;
+        esac
+        checksum=$(echo "$content" | sha256sum | cut -d ' ' -f 1)
+        grep -Fx "$checksum  output/issue9/$case/$path" "output/issue9/$case/ep.sha256"
+    done
+    echo "PASS: $case temp and persistent files survived EP scheduler completion"
+
+    # Durable outputs retain their contents after AP scheduler cleanup.
+    grep -Fx "persistent manifest" "output/issue9/$case/manifest.txt"
+    for path in first.txt done.txt; do
+        grep -Fx "asset data" "output/issue9/$case/$path"
+    done
+    echo "PASS: $case non-temp files remain after AP scheduler cleanup"
+
+    if [ "$case" = retained ]; then
+        sha256sum --check "output/issue9/$case/ep.sha256"
+        echo "PASS: controller --notemp retains all temporary outputs"
+    else
+        for path in unused.vrt assets; do
+            test ! -e "output/issue9/$case/$path"
+            grep -F "Removing temporary output" "logs/issue9-$case.log" \
+                | grep -F "output/issue9/$case/$path"
+        done
+        echo "PASS: $case temps survived the EP and were removed by AP scheduler cleanup"
+    fi
+done
+
+# A missing persistent output must still fail instead of being treated as temp.
+echo "=== Issue #9 negative control: missing persistent output ==="
+if snakemake output/issue9/missing/done.txt \
+    --jobs 2 --executor htcondor --htcondor-jobdir logs/issue9-missing \
+    --htcondor-held-timeout 30 --shared-fs-usage none \
     --htcondor-shared-fs-prefixes "$SHARED_FS_PREFIX" \
-    --latency-wait 1 \
-    --verbose 2>&1) || ISSUE9_RC=$?
-
-if [ "$ISSUE9_RC" -eq 0 ]; then
-    echo "FAIL: issue #9 reproducer unexpectedly completed successfully"
-    echo "$ISSUE9_OUTPUT" | tail -50
+    --latency-wait 1 --verbose 2>&1 | tee logs/issue9-missing.log; then
+    echo "FAIL: missing persistent output was accepted"
     exit 1
 fi
-
-if echo "$ISSUE9_OUTPUT" | grep -qi "missing files after" \
-    && echo "$ISSUE9_OUTPUT" | grep -q "output/issue9_unused.vrt"; then
-    echo "PASS: issue #9 reproduced (AP rejected the EP-deleted unused temp output)"
-else
-    echo "FAIL: issue #9 invocation failed for an unexpected reason (rc=$ISSUE9_RC)"
-    echo "$ISSUE9_OUTPUT" | tail -50
-    exit 1
-fi
+grep -R -l "MissingOutputException" logs/issue9-missing \
+    | xargs grep -F "output/issue9/missing/manifest.txt"
+test ! -e output/issue9/missing/done.txt
+echo "PASS: missing persistent output fails the workflow"
 
 echo ""
 echo "=== All checks passed ==="

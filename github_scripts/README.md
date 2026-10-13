@@ -122,11 +122,11 @@ The workflow also covers (Tier 1 additions):
 1. **Negative test** — `run.sh` runs a deliberately-failing rule (`always_fail`,
    not in `rule all`) as a separate targeted invocation and asserts the workflow
    exits non-zero and surfaces the error (catches "hangs/swallows failures").
-1. **Issue #9 reproducer** — a targeted invocation creates an unused temporary
-   output alongside a needed temporary directory and a persistent manifest.
-   It asserts that Snakemake 9.27.0 currently rejects the successful EP job
-   during AP output validation because the unused temporary output was deleted
-   and deliberately omitted from transfer.
+1. **Issue #9 lifecycle proof** — ungrouped and grouped invocations create an unused temp, a temporary directory with two successive consumers, and persistent outputs.
+   After EP Snakemake exits, the wrapper records hashes proving temporary and persistent producer outputs still exist with the expected contents.
+   After AP Snakemake exits, the runner verifies persistent contents remain, temps are absent, and AP logs explicitly record their cleanup.
+   A controller `--notemp` case verifies all outputs are retained, while a missing persistent output must fail with `MissingOutputException`.
+   Full invocation logs are streamed into CI output and saved under `logs/issue9-*.log`.
 
 > Note: `env_special_check` (#6) originally surfaced a real executor bug — env
 > values were delivered wrapped in literal double quotes because
