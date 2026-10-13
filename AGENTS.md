@@ -3,6 +3,11 @@
 - Before dispatching a GitHub Actions workflow, confirm that this repository's local self-hosted runner is online.
 - If the runner is offline, try to start it with `/home/cefect/LS/09_REPOS/04_TOOLS/gh_runner/actions-runner-htcondor/run.sh` before dispatching the workflow.
 - Confirm that the runner reports as online after the startup attempt, and do not dispatch the workflow if the runner could not be started.
+- Managed sandbox network restrictions can cause `gh api` connection failures even when the host network works.
+  Retry the runner status check with approved host execution before diagnosing a network outage.
+- Starting the runner writes helper files and logs outside this repository, so use approved host execution for `run.sh`.
+- Detached `nohup` runner processes may be stopped when a managed command exits.
+  Use a persistent terminal session (`tty=true`) for `run.sh` and verify GitHub reports the runner online.
 
 # Pre-commit validation
 
