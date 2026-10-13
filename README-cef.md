@@ -1,4 +1,5 @@
 # cef's README
+
 .gitignored
 
 cef's fork of the snakemake-executor-plugin-htcondor plugin
@@ -8,17 +9,20 @@ switched to working on `main` for workflows
 - CHTC's fork [upstream](https://github.com/htcondor/snakemake-executor-plugin-htcondor)
 
 list branches:
+
 ```bash
 git branch -r --list 'upstream/*'
 ```
 
 compare changes of upstream/main against ours (deploy)
+
 ```bash
 git fetch upstream main
 git diff upstream/main
 ```
 
 synchronize upstream main against origin/main
+
 ```bash
 git fetch upstream main
 
@@ -60,14 +64,17 @@ Watch the newest run with:
 ```bash
 gh run watch --repo cefect/snakemake-executor-plugin-htcondor
 ```
- 
+
 ## publish a new tag
 
 get the name of all tags on the repo:
+
 ```bash
 git tag -l
 ```
+
 create and push a new tag:
+
 ```bash
 git tag -a v2026.08.28 -m "v2026.08.28"
 git push origin v2026.08.28
