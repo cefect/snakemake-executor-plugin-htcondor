@@ -24,3 +24,18 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH
 # and with which parameters. Those args must be passed back to Snakemake here to run
 # that step.
 snakemake "$@"
+
+# Inspect real files after EP Snakemake (including its scheduler cleanup) exits.
+# Only the issue #9 producer creates this manifest; it is not transferred in.
+if [ -f .issue9-post-ep ]; then
+    test -n "${_CONDOR_SCRATCH_DIR:-}"
+    {
+        read -r proof
+        while IFS= read -r path; do
+            test -s "$path"
+            sha256sum "$path"
+        done > "$proof"
+    } < .issue9-post-ep
+    echo "PASS: issue #9 temp and persistent outputs remain after EP Snakemake exits"
+    cat "$proof"
+fi

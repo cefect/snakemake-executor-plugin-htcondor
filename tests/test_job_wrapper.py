@@ -14,7 +14,40 @@ basename() was being used on the wrapper path, stripping the directory.
 """
 
 from unittest.mock import Mock
+from types import SimpleNamespace
+
+import pytest
+import snakemake_executor_plugin_htcondor
+import snakemake_interface_executor_plugins.utils
 from snakemake_executor_plugin_htcondor import Executor
+
+
+@pytest.mark.parametrize(
+    "shared_fs_usage, expected",
+    [
+        pytest.param(set(), "snakemake --notemp", id="transfer_retains_worker_temps"),
+        pytest.param(
+            {"input-output"}, "snakemake", id="shared_fs_keeps_worker_cleanup"
+        ),
+    ],
+)
+def test_worker_temp_retention(shared_fs_usage, expected):
+    """Add worker-only retention without changing controller cleanup settings."""
+    executor = snakemake_executor_plugin_htcondor.Executor.__new__(
+        snakemake_executor_plugin_htcondor.Executor
+    )
+    executor.workflow = SimpleNamespace(
+        storage_settings=SimpleNamespace(shared_fs_usage=shared_fs_usage, notemp=False)
+    )
+
+    # Use the real command formatter: a list here breaks remote job submission.
+    assert (
+        snakemake_interface_executor_plugins.utils.join_cli_args(
+            ["snakemake", executor.additional_general_args()]
+        )
+        == expected
+    )
+    assert executor.workflow.storage_settings.notemp is False
 
 
 class TestGetBaseExecAndArgs:

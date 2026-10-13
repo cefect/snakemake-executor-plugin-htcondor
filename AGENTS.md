@@ -8,6 +8,7 @@
 - Starting the runner writes helper files and logs outside this repository, so use approved host execution for `run.sh`.
 - Detached `nohup` runner processes may be stopped when a managed command exits.
   Use a persistent terminal session (`tty=true`) for `run.sh` and verify GitHub reports the runner online.
+- If `gh pr edit` fails on deprecated `projectCards` fields, update PR title/body/labels through `gh api --method PATCH repos/cefect/snakemake-executor-plugin-htcondor/issues/<number>` with a JSON input file.
 
 # Pre-commit validation
 
@@ -17,7 +18,10 @@
 
 # Local test environment
 
+- `github_scripts/.snakemake` may be owned by a container user and unwritable locally.
+  For isolated dry-run probes, pass the absolute `github_scripts/Snakefile` path with `--snakefile` and a fresh writable directory with `--directory` instead of changing its ownership.
 - Conda env `htcondor-plugin` (Python 3.11) has the project installed editable with dev deps (pytest, snakemake, pre-commit, coverage).
 - Unit tests: `conda run -n htcondor-plugin python -m pytest tests/`. `integration_tests/` need a live HTCondor AP; rely on CI.
 - The default `~/.cache/pre-commit` hook envs are broken (missing `libpython3.11.so`); run pre-commit with a separate cache:
   `PRE_COMMIT_HOME=$HOME/.cache/pre-commit-htcondor-plugin conda run -n htcondor-plugin pre-commit run --all-files`
+- If Black stalls in the managed sandbox, stop that run and retry the full suite with approved host execution; the existing hook environments work there.

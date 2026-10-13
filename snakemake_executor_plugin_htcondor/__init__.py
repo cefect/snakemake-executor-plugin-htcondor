@@ -160,6 +160,13 @@ common_settings = CommonSettings(
 # Required:
 # Implementation of your executor
 class Executor(RemoteExecutor):
+    def additional_general_args(self):
+        """Retain transferred worker outputs until the AP validates and cleans them."""
+        # Match run_job's transfer mode; shared-filesystem workers keep normal cleanup.
+        if not self.workflow.storage_settings.shared_fs_usage:
+            return "--notemp"
+        return ""
+
     def __post_init__(self):
         # access workflow
         self.workflow
@@ -303,13 +310,12 @@ class Executor(RemoteExecutor):
         job: Optional[JobExecutorInterface] = None,
         validate_exists: bool = True,
         warn_absolute: bool = False,
-        unneeded_temp: Optional[set] = None,
     ) -> bool:
         """
         Add a file to the transfer list if it's not on a shared filesystem.
 
         This is the single gatekeeper for both input and output transfer lists.
-        It handles unneeded-temp skipping, shared-FS filtering, absolute-path
+        It handles shared-FS filtering, absolute-path
         warnings, normalization, and deduplication.
 
         Args:
@@ -322,14 +328,10 @@ class Executor(RemoteExecutor):
                 Set to False for output files that do not exist yet.
             warn_absolute: If True, log a warning when the path is absolute and
                 not on a shared filesystem prefix.
-            unneeded_temp: Normalized paths of temp() outputs the EP deletes
-                (``dag.get_unneeded_temp_files``).  These must not be listed
-                for transfer; other temp() outputs survive on the EP and are
-                transferred so downstream jobs can consume them.
 
         Returns:
             True if the file was added to *transfer_list*, False if it was
-            skipped for any reason (empty path, temp, shared FS, duplicate, …).
+            skipped for any reason (empty path, shared FS, duplicate, …).
         """
         # Explicitly handle empty/None filepaths
         if file_path is None or str(file_path).strip() == "":
@@ -354,15 +356,6 @@ class Executor(RemoteExecutor):
 
         # Normalize path to handle './', '../', '//' etc.
         file_path = normpath(file_path)
-
-        # Skip temp() outputs the EP deletes once no consumer outside the job
-        # needs them.  Declaring them in transfer_output_files would cause
-        # HTCondor to error when it can't find the deleted file at transfer time.
-        if unneeded_temp and file_path in unneeded_temp:
-            self.logger.debug(
-                f"Skipping unneeded temp file (deleted on EP): {file_path}"
-            )
-            return False
 
         # Check if already in transfer list (after normalization)
         if file_path in transfer_list:
@@ -769,21 +762,14 @@ class Executor(RemoteExecutor):
                     seen_paths.add(p_str)
                     all_output_paths.append(p)
 
-        # Temp outputs the EP deletes: the same set Snakemake passes to the EP as
-        # --unneeded-temp-files.  The EP keeps every other temp output (e.g. one
-        # consumed by a later job), so those are transferred and Snakemake on the
-        # AP removes them after their final consumer succeeds.
-        unneeded_temp = {
-            normpath(str(f)) for f in self.workflow.dag.get_unneeded_temp_files(job)
-        }
-
+        # Worker-only --notemp keeps every declared output available for transfer.
+        # The AP validates them before applying its normal DAG-based temp cleanup.
         for path in all_output_paths:
             self._add_file_if_transferable(
                 path,
                 transfer_output_files,
                 validate_exists=False,
                 warn_absolute=True,
-                unneeded_temp=unneeded_temp,
             )
 
         # Process script and notebook files from all rules in the job.

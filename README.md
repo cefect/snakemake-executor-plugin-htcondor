@@ -79,6 +79,11 @@ These are useful for transferring files that aren't part of the rule's `input:`/
 Supports both string (comma-separated) and list formats. Wildcards (e.g., `{sample}`) are expanded for individual jobs, but **not** for grouped jobs since the resources are defined at the group level.
 Files on shared filesystem prefixes are automatically excluded from transfer.
 
+With `--shared-fs-usage none`, worker Snakemake runs with `--notemp` so all declared outputs remain available for transfer and AP validation, including unused and group-internal temporary outputs.
+The AP retains normal `temp()` cleanup after the last consumer finishes; passing `--notemp` to the AP retains temporary outputs there too.
+This compatibility strategy adds transfer and disk overhead for temporary outputs that would otherwise be deleted on the worker.
+Shared-filesystem execution keeps its existing worker cleanup behavior.
+
 Example usage:
 ```python
 rule process:
