@@ -8,6 +8,7 @@
 - Starting the runner writes helper files and logs outside this repository, so use approved host execution for `run.sh`.
 - Detached `nohup` runner processes may be stopped when a managed command exits.
   Use a persistent terminal session (`tty=true`) for `run.sh` and verify GitHub reports the runner online.
+- If `gh pr edit` fails on deprecated `projectCards` fields, update PR title/body/labels through `gh api --method PATCH repos/cefect/snakemake-executor-plugin-htcondor/issues/<number>` with a JSON input file.
 
 # Pre-commit validation
 
