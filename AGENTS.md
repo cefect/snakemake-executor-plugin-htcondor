@@ -18,6 +18,8 @@
 
 # Local test environment
 
+- Project skills live in `.agents/skills`, with `.claude/skills` symlinked there.
+  The managed sandbox may expose `.agents` as read-only even when the host directory is writable; use approved host execution for authorized skill-directory changes.
 - `github_scripts/.snakemake` may be owned by a container user and unwritable locally.
   For isolated dry-run probes, pass the absolute `github_scripts/Snakefile` path with `--snakefile` and a fresh writable directory with `--directory` instead of changing its ownership.
 - Conda env `htcondor-plugin` (Python 3.11) has the project installed editable with dev deps (pytest, snakemake, pre-commit, coverage).
