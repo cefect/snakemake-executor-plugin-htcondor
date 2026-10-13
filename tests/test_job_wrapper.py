@@ -18,14 +18,17 @@ from types import SimpleNamespace
 
 import pytest
 import snakemake_executor_plugin_htcondor
+import snakemake_interface_executor_plugins.utils
 from snakemake_executor_plugin_htcondor import Executor
 
 
 @pytest.mark.parametrize(
     "shared_fs_usage, expected",
     [
-        pytest.param(set(), ["--notemp"], id="transfer_retains_worker_temps"),
-        pytest.param({"input-output"}, [], id="shared_fs_keeps_worker_cleanup"),
+        pytest.param(set(), "snakemake --notemp", id="transfer_retains_worker_temps"),
+        pytest.param(
+            {"input-output"}, "snakemake", id="shared_fs_keeps_worker_cleanup"
+        ),
     ],
 )
 def test_worker_temp_retention(shared_fs_usage, expected):
@@ -37,7 +40,13 @@ def test_worker_temp_retention(shared_fs_usage, expected):
         storage_settings=SimpleNamespace(shared_fs_usage=shared_fs_usage, notemp=False)
     )
 
-    assert executor.additional_general_args() == expected
+    # Use the real command formatter: a list here breaks remote job submission.
+    assert (
+        snakemake_interface_executor_plugins.utils.join_cli_args(
+            ["snakemake", executor.additional_general_args()]
+        )
+        == expected
+    )
     assert executor.workflow.storage_settings.notemp is False
 
 

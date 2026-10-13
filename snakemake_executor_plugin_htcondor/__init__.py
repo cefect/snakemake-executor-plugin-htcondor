@@ -164,8 +164,8 @@ class Executor(RemoteExecutor):
         """Retain transferred worker outputs until the AP validates and cleans them."""
         # Match run_job's transfer mode; shared-filesystem workers keep normal cleanup.
         if not self.workflow.storage_settings.shared_fs_usage:
-            return ["--notemp"]
-        return []
+            return "--notemp"
+        return ""
 
     def __post_init__(self):
         # access workflow
