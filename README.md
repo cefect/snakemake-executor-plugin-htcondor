@@ -313,6 +313,14 @@ If your computing environment has `/staging` mounted on both AP and EPs, but you
 - Multiple prefixes can be specified as a comma-separated list
 - Prefixes should be absolute paths
 
+### Stale `directory()` Completion Markers
+
+When an existing `directory()` output is returned to the AP, HTCondor can leave the AP's empty `.snakemake_timestamp` marker with its old mtime, so unchanged jobs rebuild on the next run.
+The opt-in `--htcondor-prepare-empty-directory-markers` flag (profile: `htcondor-prepare-empty-directory-markers: true`) works around this.
+Immediately before each submission, it writes one byte into each existing empty marker of the job's returned directory outputs, restoring the marker's exact timestamps, so the returned empty marker truncates it and refreshes its mtime.
+Missing, symlinked, nonregular, nonempty, hard-linked or foreign-owned markers are left untouched, and nothing is created.
+The flag has no effect with a shared filesystem.
+
 ### Example of Non Shared Filesystem Usage
 
 Given a directory structure on the AP such as:

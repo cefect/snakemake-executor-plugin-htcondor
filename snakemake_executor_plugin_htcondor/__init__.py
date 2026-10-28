@@ -21,6 +21,7 @@ from os.path import join, isabs, relpath, normpath, exists, isdir
 from os import makedirs, sep
 import os
 import re
+import stat
 import sys
 
 LogSpec = tuple[Callable[[str], None], str]
@@ -78,9 +79,19 @@ def is_shared_fs(in_path, shared_prefixes) -> bool:
     return any(normalized_path.startswith(prefix) for prefix in normalized_prefixes)
 
 
+def ap_output_destination(out_path: str, workdir: str) -> str:
+    """Resolve a transfer_output_files entry to its absolute AP destination."""
+    if isabs(out_path):
+        return out_path
+    return normpath(join(workdir, out_path))
+
+
 # Optional:
 # Default timeout in seconds for held jobs (4 hours).
 DEFAULT_HELD_TIMEOUT_SECONDS = 4 * 60 * 60
+
+# Snakemake's completion marker inside directory() outputs.
+DIRECTORY_MARKER = ".snakemake_timestamp"
 
 
 # Define additional settings for your executor.
@@ -116,6 +127,18 @@ class ExecutorSettings(ExecutorSettingsBase):
             "(e.g., condor_release) before the workflow fails. "
             "Default is 4 hours (14400 seconds). Set to 0 to "
             "fail immediately when a job is held.",
+            "required": False,
+        },
+    )
+    # Plain bool (not Optional) so Snakemake exposes it as a CLI flag.
+    prepare_empty_directory_markers: bool = field(
+        default=False,
+        metadata={
+            "help": "Opt-in mitigation for stale directory() completion markers. "
+            "Before each submission, write one byte into every existing empty "
+            f"{DIRECTORY_MARKER} of the job's returned directory outputs on the AP, "
+            "restoring its original timestamps, so HTCondor's output transfer "
+            "refreshes the marker's mtime. Ignored with a shared filesystem.",
             "required": False,
         },
     )
@@ -869,11 +892,9 @@ class Executor(RemoteExecutor):
         # directory — which is the default when no remap is present.
         workdir = self.workflow.workdir_init
         for out_path in transfer_output_files:
-            if isabs(out_path):
-                # Identity remap: EP absolute path → same absolute path on AP
-                remap = f"{out_path} = {out_path}"
-            else:
-                abs_ap_dest = normpath(join(workdir, out_path))
+            # Absolute paths get an identity remap: EP absolute path → same AP path
+            abs_ap_dest = ap_output_destination(out_path, workdir)
+            if not isabs(out_path):
                 # Use workdir + sep to prevent prefix collisions:
                 # e.g. "/ap/workdir_evil/f" would wrongly pass startswith("/ap/workdir")
                 workdir_prefix = workdir if workdir.endswith(sep) else workdir + sep
@@ -885,7 +906,7 @@ class Executor(RemoteExecutor):
                         "on the Access Point. Consider using output paths that "
                         "stay within the workflow working directory."
                     )
-                remap = f"{out_path} = {abs_ap_dest}"
+            remap = f"{out_path} = {abs_ap_dest}"
             if remap not in transfer_output_remaps:
                 transfer_output_remaps.append(remap)
 
@@ -895,6 +916,163 @@ class Executor(RemoteExecutor):
             f"Transfer output remaps: {transfer_output_remaps}"
         )
         return transfer_input_files, transfer_output_files, transfer_output_remaps
+
+    def _get_returned_directory_outputs(
+        self, job: JobExecutorInterface, transfer_output_files: List[str]
+    ) -> List[str]:
+        """
+        Return AP destinations of declared directory() outputs this job transfers back.
+
+        Grouped jobs include every member's outputs (internal ones too). Logs, inputs,
+        shared-filesystem outputs and extra ``htcondor_transfer_output_files`` are
+        excluded because only declared outputs present in the transfer list qualify.
+        """
+        if job.is_group():
+            members = [member for layer in job.toposorted for member in layer]
+        else:
+            members = [job]
+
+        destinations = []
+        for member in members:
+            for f in member.output:
+                # Snakemake IOFiles are str subclasses carrying the directory() flag
+                if not (isinstance(f, str) and getattr(f, "is_directory", False)):
+                    continue
+                out_path = normpath(str(f))
+                if out_path not in transfer_output_files:
+                    continue
+                destination = ap_output_destination(
+                    out_path, self.workflow.workdir_init
+                )
+                if destination not in destinations:
+                    destinations.append(destination)
+        return destinations
+
+    def _prepare_directory_marker(self, directory: str) -> Optional[str]:
+        """
+        Make one existing empty completion marker nonempty without changing its timestamps.
+
+        HTCondor leaves an existing empty AP file untouched when the returned file is
+        also empty, so its old mtime survives a successful job (#11). A nonempty
+        destination is truncated on return instead, which refreshes its mtime. Writing
+        one byte and restoring the exact nanosecond atime/mtime does not advance
+        freshness, so genuinely newer inputs still trigger a rebuild.
+
+        The output directory is opened without following symlinks and the marker is
+        opened relative to that descriptor; all checks, writes and timestamp restores
+        use the marker descriptor. Missing, symlinked, nonregular, nonempty,
+        hard-linked or foreign-owned markers are left alone (nothing is created).
+
+        Parameters
+        ----------
+        directory : str
+            Absolute AP destination of a returned directory() output.
+
+        Returns
+        -------
+        str or None
+            None when the marker was prepared, otherwise the reason it was skipped.
+
+        Raises
+        ------
+        WorkflowError
+            If writing or restoring the marker fails after it was opened for writing.
+        """
+        try:
+            dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            return "directory missing"
+        except OSError as e:
+            return f"directory not opened ({e.strerror})"
+
+        try:
+            # Inspect without following symlinks before opening anything
+            try:
+                pre = os.stat(DIRECTORY_MARKER, dir_fd=dir_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return "marker missing"
+            if not stat.S_ISREG(pre.st_mode):
+                return "marker not a regular file"
+            if pre.st_size != 0:
+                return "marker nonempty"
+            # utime with explicit times requires ownership; never touch shared inodes
+            if pre.st_uid != os.geteuid() or pre.st_nlink != 1:
+                return "marker hard-linked or not owned"
+
+            try:
+                fd = os.open(
+                    DIRECTORY_MARKER,
+                    os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK,
+                    dir_fd=dir_fd,
+                )
+            except OSError as e:
+                return f"marker not opened ({e.strerror})"
+        finally:
+            os.close(dir_fd)
+
+        try:
+            # Recheck identity on the descriptor in case the marker was replaced
+            before = os.fstat(fd)
+            if (before.st_dev, before.st_ino) != (pre.st_dev, pre.st_ino):
+                return "marker replaced during preparation"
+            if not stat.S_ISREG(before.st_mode) or before.st_size != 0:
+                return "marker changed during preparation"
+
+            try:
+                if os.write(fd, b"1") != 1:
+                    raise OSError("short completion-marker write")
+                os.utime(fd, ns=(before.st_atime_ns, before.st_mtime_ns))
+                after = os.fstat(fd)
+            except OSError as e:
+                raise WorkflowError(
+                    f"Failed to prepare completion marker {join(directory, DIRECTORY_MARKER)}: "
+                    f"{e}. Its mtime may now be newer than its outputs; remove the "
+                    "directory to force a rebuild."
+                )
+            if (after.st_size, after.st_atime_ns, after.st_mtime_ns) != (
+                1,
+                before.st_atime_ns,
+                before.st_mtime_ns,
+            ):
+                raise WorkflowError(
+                    f"Completion marker {join(directory, DIRECTORY_MARKER)} failed its "
+                    "preparation postcondition (size or timestamps changed)."
+                )
+            return None
+        finally:
+            os.close(fd)
+
+    def _prepare_directory_markers(
+        self, job: JobExecutorInterface, transfer_output_files: List[str]
+    ) -> int:
+        """Prepare existing empty markers of every returned directory output of a job.
+
+        Already-prepared (nonempty) markers keep their original timestamps, so a
+        submit failure after preparation needs no rollback, and the next
+        submission or retry is idempotent.
+
+        Returns
+        -------
+        int
+            Number of markers prepared.
+        """
+        workdir = self.workflow.workdir_init
+        directories = self._get_returned_directory_outputs(job, transfer_output_files)
+        prepared = 0
+        for directory in directories:
+            reason = self._prepare_directory_marker(directory)
+            self.logger.debug(
+                f"Directory marker {relpath(join(directory, DIRECTORY_MARKER), workdir)}: "
+                f"{'prepared' if reason is None else f'skipped, {reason}'}"
+            )
+            prepared += reason is None
+
+        if directories:
+            self.logger.info(
+                f"Job {job.jobid}: prepared {prepared} of {len(directories)} "
+                "directory completion marker(s) before submission"
+            )
+        return prepared
 
     def _prepare_config_files_for_transfer(
         self, job_args: str, shared_fs_prefixes: List[str]
@@ -1490,6 +1668,12 @@ class Executor(RemoteExecutor):
         # Submitting job to HTCondor
         try:
             submit_description.issue_credentials()
+            # Prime stale-prone AP markers last, immediately before submission
+            if (
+                needs_transfer
+                and self.workflow.executor_settings.prepare_empty_directory_markers
+            ):
+                self._prepare_directory_markers(job, transfer_output_files)
             submit_result = schedd.submit(submit_description)
         except Exception as e:
             traceback.print_exc()

@@ -5,7 +5,18 @@ Unit tests for file transfer functionality in HTCondor executor.
 import tempfile
 import os
 from unittest.mock import Mock
+
+import pytest
+from snakemake.io import IOFile, directory
+
 from snakemake_executor_plugin_htcondor import Executor
+from conftest import (
+    create_mock_executor,
+    create_mock_group_job,
+    create_mock_individual_job,
+    marker_state,
+    seed_directory_marker,
+)
 
 
 class TestAddFileIfTransferable:
@@ -1324,3 +1335,70 @@ class TestAbsolutePathWarning:
             assert "absolute" in warning_msg.lower() or "flatten" in warning_msg.lower()
         finally:
             os.unlink(abs_path)  # delete
+
+
+class TestDirectoryMarkerPreparation:
+    """Test opt-in priming of empty directory() completion markers (#12)."""
+
+    @pytest.mark.parametrize(
+        "case, expected_reason",
+        [
+            pytest.param("empty", None, id="empty_prepared"),
+            pytest.param("nonempty", "marker nonempty", id="nonempty"),
+            pytest.param("missing_marker", "marker missing", id="missing_marker"),
+            pytest.param("missing_dir", "directory missing", id="missing_dir"),
+            pytest.param("symlink", "marker not a regular", id="symlink_marker"),
+            pytest.param("fifo", "marker not a regular", id="fifo_marker"),
+            pytest.param("readonly", "marker not opened", id="readonly_marker"),
+            pytest.param("hardlink", "marker hard-linked", id="hardlinked_marker"),
+            pytest.param("symlinked_dir", "directory not opened", id="symlinked_dir"),
+        ],
+    )
+    def test_prepare_directory_marker(self, tmp_path, case, expected_reason):
+        """Only existing empty regular owned markers gain one byte; timestamps stay exact."""
+        executor = create_mock_executor()
+        out_dir, watched = seed_directory_marker(tmp_path, case)
+        before = marker_state(watched)
+
+        reason = executor._prepare_directory_marker(out_dir)
+
+        expected = before if reason is not None else (1,) + before[1:]
+        assert (reason or "").startswith(expected_reason or "")
+        assert marker_state(watched) == expected
+
+    @pytest.mark.parametrize(
+        "is_group, expected",
+        [
+            pytest.param(False, ["/test/workdir/out/d"], id="individual"),
+            pytest.param(
+                True,
+                ["/test/workdir/work/internal_d", "/abs/d"],
+                id="group_internal_and_absolute",
+            ),
+        ],
+    )
+    def test_get_returned_directory_outputs(self, is_group, expected):
+        """Select remapped AP destinations of declared directory outputs only."""
+        executor = create_mock_executor(shared_fs_prefixes=["/staging"])
+        producer = create_mock_individual_job(
+            input_files=["in/raw.txt"],
+            output_files=[IOFile(directory("work/internal_d")), IOFile("work/f.txt")],
+        )
+        consumer = create_mock_individual_job(
+            input_files=[IOFile(directory("work/internal_d"))],
+            output_files=[
+                IOFile(directory("/abs/d")),
+                IOFile(directory("/staging/d")),
+            ],
+        )
+        individual = create_mock_individual_job(
+            output_files=[IOFile(directory("out/d")), IOFile("out/f.txt")],
+            htcondor_transfer_output_files="cache/d",
+        )
+        job = create_mock_group_job([producer, consumer]) if is_group else individual
+        transfer_output_files = executor._get_files_for_transfer(job)[1]
+
+        result = executor._get_returned_directory_outputs(job, transfer_output_files)
+
+        assert isinstance(result, list)
+        assert result == expected

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **Opt-in directory marker preparation**: `--htcondor-prepare-empty-directory-markers` (default off) prevents unchanged jobs from rebuilding when HTCondor returns an empty `.snakemake_timestamp` onto an existing empty AP marker and leaves its old mtime intact. Immediately before each submission, existing empty markers of the job's returned `directory()` outputs (including internal grouped outputs) gain one byte with their exact nanosecond timestamps restored, so the return transfer truncates them and refreshes their mtime. Missing, symlinked, nonregular, nonempty, hard-linked or foreign-owned markers are never touched or created; shared-filesystem jobs are unaffected ([#11](https://github.com/cefect/snakemake-executor-plugin-htcondor/issues/11), [#12](https://github.com/cefect/snakemake-executor-plugin-htcondor/issues/12)).
+
 ## [0.2.0](https://github.com/htcondor/snakemake-executor-plugin-htcondor/compare/v0.1.2...v0.2.0) (2026-02-23)
 
 ### Features

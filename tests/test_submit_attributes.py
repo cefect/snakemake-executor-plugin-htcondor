@@ -16,10 +16,19 @@ Non-string values (bool, int) are passed through as-is.
 
 """
 
+import os
 import pytest
 from unittest.mock import Mock
 
-from conftest import create_mock_submit_executor, mock_htcondor_submission
+from snakemake.io import IOFile, directory
+from snakemake_interface_common.exceptions import WorkflowError
+
+from conftest import (
+    SEED_NS,
+    create_mock_submit_executor,
+    mock_htcondor_submission,
+    seed_directory_marker,
+)
 
 
 class TestSubmittingAttributes:
@@ -157,3 +166,49 @@ class TestSubmittingAttributes:
             mock_executor.run_job(job)
 
         assert captured_submit_dict["transfer_output_files"] == expected
+
+
+class TestDirectoryMarkerSubmission:
+    """run_job primes markers only when enabled, immediately before submission."""
+
+    @pytest.mark.parametrize(
+        "enabled, submit_error, expected_size",
+        [
+            pytest.param(True, None, 1, id="enabled_prepared"),
+            pytest.param(False, None, 0, id="disabled_untouched"),
+            pytest.param(True, RuntimeError("schedd down"), 1, id="submit_failure"),
+        ],
+    )
+    def test_run_job_prepares_directory_markers(
+        self, tmp_path, enabled, submit_error, expected_size
+    ):
+        """Marker timestamps never advance, whether or not submission succeeds."""
+        executor = create_mock_submit_executor(tmp_path)
+        executor.workflow.workdir_init = str(tmp_path)
+        executor.workflow.executor_settings.prepare_empty_directory_markers = enabled
+        executor._get_exec_args_and_transfer_files.return_value = (
+            "python",
+            "-m snakemake --cores 1",
+            [],
+            ["out/d"],
+            [],
+        )
+        _, marker = seed_directory_marker(tmp_path, "empty")
+        job = Mock()
+        job.name = "marker_job"
+        job.jobid = 11
+        job.threads = 1
+        job.resources = {}
+        job.output = [IOFile(directory("out/d"))]
+        job.is_group = Mock(return_value=False)
+
+        with mock_htcondor_submission({}, submit_error=submit_error):
+            if submit_error is None:
+                executor.run_job(job)
+            else:
+                with pytest.raises(WorkflowError):
+                    executor.run_job(job)
+
+        st = os.stat(marker)
+        assert (st.st_size, st.st_mtime_ns) == (expected_size, SEED_NS)
+        assert executor.report_job_submission.called == (submit_error is None)

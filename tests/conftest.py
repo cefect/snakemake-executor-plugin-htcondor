@@ -2,6 +2,7 @@
 Shared test fixtures and utilities for HTCondor executor tests.
 """
 
+import os
 from contextlib import contextmanager
 from unittest.mock import Mock, patch
 
@@ -36,6 +37,12 @@ def create_mock_executor(shared_fs_prefixes=None):
         executor, Executor
     )
     executor._parse_file_list = Executor._parse_file_list.__get__(executor, Executor)
+    for name in (
+        "_get_returned_directory_outputs",
+        "_prepare_directory_marker",
+        "_prepare_directory_markers",
+    ):
+        setattr(executor, name, getattr(Executor, name).__get__(executor, Executor))
 
     return executor
 
@@ -48,6 +55,7 @@ def create_mock_submit_executor(tmp_path):
     executor.workflow.storage_settings.shared_fs_usage = False
     executor.workflow.executor_settings = Mock()
     executor.workflow.executor_settings.output_destination = None
+    executor.workflow.executor_settings.prepare_empty_directory_markers = False
     executor.envvars = Mock(return_value={})
     executor.report_job_submission = Mock()
     executor._unified_log_file = str(tmp_path / "snakemake-rules.log")
@@ -65,8 +73,11 @@ def create_mock_submit_executor(tmp_path):
 
 
 @contextmanager
-def mock_htcondor_submission(captured_submit_dict):
-    """Patch HTCondor submission objects and capture the submit dict."""
+def mock_htcondor_submission(captured_submit_dict, submit_error=None):
+    """Patch HTCondor submission objects and capture the submit dict.
+
+    If *submit_error* is given, ``Schedd.submit`` raises it.
+    """
 
     class FakeSubmitResult:
         def cluster(self):
@@ -81,6 +92,8 @@ def mock_htcondor_submission(captured_submit_dict):
 
     class FakeSchedd:
         def submit(self, submit_description):
+            if submit_error is not None:
+                raise submit_error
             return FakeSubmitResult()
 
     with patch.object(plugin.htcondor, "Submit", FakeSubmit), patch.object(
@@ -230,3 +243,64 @@ def create_mock_group_job(
     job.resources.get = Mock(side_effect=resource_get)
 
     return job
+
+
+# Seeded marker mtime from issue #12's proof (2000-01-01T00:00:00Z).
+SEED_NS = 946684800000000000
+
+
+def seed_directory_marker(root, case):
+    """
+    Build a directory() output on disk for one marker-preparation case.
+
+    Args:
+        root: pathlib.Path under which the output directory is created.
+        case: one of empty, nonempty, missing_marker, missing_dir, symlink,
+            fifo, readonly, hardlink, symlinked_dir.
+
+    Returns:
+        Tuple of (output directory path, path whose state must be checked).
+    """
+    directory = root / "out" / "d"
+    marker = directory / ".snakemake_timestamp"
+    outside = root / "outside"
+    outside.mkdir(parents=True)
+    if case == "missing_dir":
+        return str(directory), marker
+    directory.parent.mkdir(parents=True)
+    if case == "symlinked_dir":
+        (outside / ".snakemake_timestamp").touch()
+        os.utime(outside / ".snakemake_timestamp", ns=(SEED_NS, SEED_NS))
+        directory.symlink_to(outside, target_is_directory=True)
+        return str(directory), outside / ".snakemake_timestamp"
+    directory.mkdir()
+    # Unrelated member file must never change
+    (directory / "member.txt").write_text("payload")
+    os.utime(directory / "member.txt", ns=(SEED_NS, SEED_NS))
+    if case == "missing_marker":
+        return str(directory), marker
+    if case == "symlink":
+        (outside / "target").touch()
+        os.utime(outside / "target", ns=(SEED_NS, SEED_NS))
+        marker.symlink_to(outside / "target")
+        return str(directory), outside / "target"
+    if case == "fifo":
+        os.mkfifo(marker)
+    else:
+        marker.write_text("x" if case == "nonempty" else "")
+    if case == "hardlink":
+        os.link(marker, outside / "link")
+    os.utime(marker, ns=(SEED_NS, SEED_NS), follow_symlinks=False)
+    if case == "readonly":
+        marker.chmod(0o444)
+    return str(directory), marker
+
+
+def marker_state(watched):
+    """Return (size, atime_ns, mtime_ns) of *watched* plus member mtime, or None."""
+    if not os.path.lexists(watched):
+        return None
+    st = os.lstat(watched)
+    member = watched.parent / "member.txt"
+    member_ns = os.stat(member).st_mtime_ns if member.exists() else None
+    return (st.st_size, st.st_atime_ns, st.st_mtime_ns, member_ns)
